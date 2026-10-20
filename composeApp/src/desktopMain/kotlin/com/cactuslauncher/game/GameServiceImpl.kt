@@ -193,11 +193,26 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         } finally { downloadControl = null }
     }
     private val runningBuilds = java.util.concurrent.ConcurrentHashMap<String, Process>()
+    /** Builds between "launch pressed" and "process registered": Java/authlib downloads and Ghost Mode run here, outside the lock. */
+    private val launchingBuilds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     override suspend fun runningBuildIds(): Set<String> = withContext(Dispatchers.IO) {
         synchronized(runningBuilds) {
             runningBuilds.entries.removeIf { !it.value.isAlive }
-            runningBuilds.keys.toSet()
+            runningBuilds.keys.toSet() + launchingBuilds
         }
+    }
+    /** Reserves [id] for one launch at a time; the lock only covers this check, never downloads or process start. */
+    private fun reserveLaunch(id: String) = synchronized(runningBuilds) {
+        require(runningBuilds[id]?.isAlive != true && id !in launchingBuilds) { "Эта сборка уже запущена." }
+        launchingBuilds.add(id)
+    }
+    private fun registerProcess(id: String, process: Process) = synchronized(runningBuilds) { runningBuilds[id] = process }
+    private fun unregisterProcess(id: String, process: Process) = synchronized(runningBuilds) { runningBuilds.remove(id, process) }
+    private fun activeProfile(): ProfileStore.Profile {
+        val snapshot = profileStore.load()
+        return snapshot.profiles().firstOrNull { it.id() == snapshot.activeId() }
+            ?: snapshot.profiles().firstOrNull()
+            ?: throw IOException("Создайте профиль игрока перед запуском.")
     }
     private val launchFailures = java.util.concurrent.ConcurrentLinkedQueue<Pair<String, String>>()
     override suspend fun takeLaunchFailures(): List<Pair<String, String>> = buildList { while (true) add(launchFailures.poll() ?: break) }
@@ -246,24 +261,34 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
             val folder = buildStore.folder(id)
             require(LoaderInstaller.installed(folder, build.loader(), build.version())) { "Сначала установите Minecraft и выбранный загрузчик." }
             val launchVersion = LoaderInstaller.profileId(folder, build.loader(), build.version())
-            val session = externalSession?.takeIf { !authlibUrl.isNullOrBlank() }
-            val url = session?.apiRoot()
-            val injector = if (session != null && !url.isNullOrBlank()) AuthlibInjector(injectorRoot).ensure() else null
-            synchronized(runningBuilds) {
-                require(runningBuilds[id]?.isAlive != true) { "Эта сборка уже запущена." }
-                val profile = profileStore.load().let { snapshot -> snapshot.profiles().first { it.id() == snapshot.activeId() } }
-                buildStore.markLaunched(id)
+            val profile = activeProfile()
+            reserveLaunch(id)
+            try {
+                val session = externalSession?.takeIf { !authlibUrl.isNullOrBlank() }
+                val url = session?.apiRoot()
+                val injector = if (session != null && !url.isNullOrBlank()) AuthlibInjector(injectorRoot).ensure() else null
                 val process = MinecraftLauncher.launch(folder, launchVersion, profile.name(), memoryGb, session, injector, url, automaticHeap, automaticOptimization, ghostMode)
-                if (process == null) return@runInterruptible true
-                runningBuilds[id] = process
+                if (process == null) {
+                    markLaunchedQuietly(id)
+                    return@runInterruptible true
+                }
+                registerProcess(id, process)
                 if (process.waitFor(1200, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    unregisterProcess(id, process)
                     Thread.sleep(300)
                     throw IOException(launchFailureMessage(id, process.exitValue(), onlyKnown = false))
                 }
+                markLaunchedQuietly(id)
                 watchLaunchedProcess(id, process)
                 false
+            } finally {
+                launchingBuilds.remove(id)
             }
         }
+    }
+    /** The game is already running, so a failed "last played" write must not be reported as a launch error. */
+    private fun markLaunchedQuietly(id: String) {
+        try { buildStore.markLaunched(id) } catch (_: IOException) { }
     }
     override suspend fun launchRecoveryBuild(id: String, excludedMod: String, memoryGb: Int, authlibUrl: String?, automaticHeap: Boolean, automaticOptimization: Boolean) {
         kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
@@ -272,36 +297,40 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
             require(LoaderInstaller.installed(folder, build.loader(), build.version())) { "Сначала установите Minecraft и выбранный загрузчик." }
             val diagnosis = CrashDiagnosis().analyze(folder, build.version(), build.loader())
             require(diagnosis.recoverable() && diagnosis.suspectMod() == excludedMod) { "Этот мод нельзя безопасно убрать из пробного запуска." }
-            synchronized(runningBuilds) {
-                require(runningBuilds[id]?.isAlive != true) { "Эта сборка уже запущена." }
+            val launchVersion = LoaderInstaller.profileId(folder, build.loader(), build.version())
+            val profile = activeProfile()
+            reserveLaunch(id)
+            try {
+                val session = externalSession?.takeIf { !authlibUrl.isNullOrBlank() }
+                val url = session?.apiRoot()
+                val injector = if (session != null && !url.isNullOrBlank()) AuthlibInjector(injectorRoot).ensure() else null
                 val workspace = CrashRecovery().createWorkspace(folder, folder.parent.resolve("recovery"), excludedMod)
+                var process: Process? = null
                 try {
-                    val profile = profileStore.load().let { snapshot -> snapshot.profiles().first { it.id() == snapshot.activeId() } }
-                    val session = externalSession?.takeIf { !authlibUrl.isNullOrBlank() }
-                    val url = session?.apiRoot()
-                    val injector = if (session != null && !url.isNullOrBlank()) AuthlibInjector(injectorRoot).ensure() else null
-                    val launchVersion = LoaderInstaller.profileId(folder, build.loader(), build.version())
-                    val process = MinecraftLauncher.launchInDirectory(folder, workspace, launchVersion, profile.name(), memoryGb,
+                    val started = MinecraftLauncher.launchInDirectory(folder, workspace, launchVersion, profile.name(), memoryGb,
                         session, injector, url, automaticHeap, automaticOptimization, false)
-                    runningBuilds[id] = process
+                    process = started
+                    registerProcess(id, started)
                     Thread({
-                        try { process.waitFor() } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+                        try { started.waitFor() } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
                         finally {
-                            synchronized(runningBuilds) { if (runningBuilds[id] === process) runningBuilds.remove(id) }
+                            unregisterProcess(id, started)
                             try { CrashRecovery().deleteWorkspace(workspace) } catch (_: IOException) { }
                         }
                     }, "cactus-recovery-cleanup").apply { isDaemon = true; start() }
-                    if (process.waitFor(1200, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                        synchronized(runningBuilds) { runningBuilds.remove(id, process) }
-                        throw IOException("Пробный запуск завершился с кодом ${process.exitValue()}. Его вывод добавлен в logs/cactus-launch.log.")
+                    if (started.waitFor(1200, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        unregisterProcess(id, started)
+                        throw IOException("Пробный запуск завершился с кодом ${started.exitValue()}. Его вывод добавлен в logs/cactus-launch.log.")
                     }
                 } catch (error: Exception) {
-                    if (runningBuilds[id]?.isAlive != true) {
-                        runningBuilds.remove(id)
+                    val running = process
+                    if (running == null) {
                         try { CrashRecovery().deleteWorkspace(workspace) } catch (cleanup: IOException) { error.addSuppressed(cleanup) }
-                    }
+                    } else if (!running.isAlive) unregisterProcess(id, running)
                     throw error
                 }
+            } finally {
+                launchingBuilds.remove(id)
             }
         }
     }

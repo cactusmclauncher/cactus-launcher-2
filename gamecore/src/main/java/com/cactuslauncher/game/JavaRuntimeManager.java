@@ -17,16 +17,23 @@ public final class JavaRuntimeManager {
     public JavaRuntimeManager(Path root) { this(root, new DownloadControl()); }
     public JavaRuntimeManager(Path root, DownloadControl control) { this.root = root.toAbsolutePath().normalize(); this.control = control; }
 
-    public synchronized Path ensure(int major, Consumer<String> progress) throws IOException {
+    /** One lock per runtime folder, shared by every manager instance, so parallel installs and launches never race on it. */
+    private static final java.util.concurrent.ConcurrentHashMap<Path, Object> LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public Path ensure(int major, Consumer<String> progress) throws IOException {
         return ensure(major, progress, null);
     }
 
-    public synchronized Path ensure(int major, Consumer<String> progress, String architectureOverride) throws IOException {
-        try { return ensureProvider(major, progress, false, architectureOverride); }
-        catch (InterruptedIOException e) {
-            if (Thread.currentThread().isInterrupted()) throw e;
-            return fallback(major, progress, e, architectureOverride);
-        } catch (IOException e) { return fallback(major, progress, e, architectureOverride); }
+    public Path ensure(int major, Consumer<String> progress, String architectureOverride) throws IOException {
+        String architecture = architectureOverride != null ? architectureOverride : System.getProperty("os.arch", "");
+        Object lock = LOCKS.computeIfAbsent(root.resolve(major + "-" + architecture), key -> new Object());
+        synchronized (lock) {
+            try { return ensureProvider(major, progress, false, architectureOverride); }
+            catch (InterruptedIOException e) {
+                if (Thread.currentThread().isInterrupted()) throw e;
+                return fallback(major, progress, e, architectureOverride);
+            } catch (IOException e) { return fallback(major, progress, e, architectureOverride); }
+        }
     }
 
     private Path fallback(int major, Consumer<String> progress, IOException original, String architectureOverride) throws IOException {
@@ -43,11 +50,15 @@ public final class JavaRuntimeManager {
         String os = osName.contains("mac") ? "mac" : osName.contains("win") ? "windows" : "linux";
         String architecture = System.getProperty("os.arch", "");
         String arch = architectureOverride != null ? architectureOverride : architecture.equals("aarch64") || architecture.equals("arm64") ? "aarch64" : architecture.equals("amd64") || architecture.equals("x86_64") ? "x64" : "";
-        if (!arch.equals("aarch64") && !arch.equals("x64")) throw new IOException("Неподдерживаемая архитектура Java: " + arch);
-        if (arch.isEmpty()) throw new IOException("Неподдерживаемая архитектура Java: " + architecture);
+        if (!arch.equals("aarch64") && !arch.equals("x64"))
+            throw new IOException("Неподдерживаемая архитектура Java: " + (arch.isEmpty() ? architecture : arch));
         Path destination = root.resolve(major + "-" + os + "-" + arch);
         if (Files.isSymbolicLink(root) || Files.isSymbolicLink(destination)) throw new IOException("Папка Java не должна быть символической ссылкой.");
-        if (Files.exists(destination)) return executable(destination, major);
+        if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
+            Path existing = existingRuntime(destination, major);
+            if (existing != null) return existing;
+            progress.accept("Портативная Java " + major + " повреждена, устанавливаем заново");
+        }
         Files.createDirectories(root);
         progress.accept("Поиск портативной Java " + major);
         var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NORMAL).build();
@@ -152,6 +163,27 @@ public final class JavaRuntimeManager {
             try (var paths = Files.walk(staging)) {
                 for (var path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
             }
+        }
+    }
+
+    /**
+     * Returns the java executable of an installed runtime, or null if the folder is broken
+     * (no executable, wrong version, unreadable release file). A broken folder is moved aside and deleted.
+     */
+    static Path existingRuntime(Path destination, int major) throws IOException {
+        try { return executable(destination, major); }
+        catch (IOException | UncheckedIOException broken) {
+            Path aside = destination.resolveSibling(destination.getFileName() + ".broken-" + UUID.randomUUID().toString().substring(0, 8));
+            Files.move(destination, aside);
+            try { deleteTree(aside); }
+            catch (IOException ignored) { /* The renamed folder no longer blocks a fresh install. */ }
+            return null;
+        }
+    }
+
+    private static void deleteTree(Path folder) throws IOException {
+        try (var paths = Files.walk(folder)) {
+            for (var path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
         }
     }
 

@@ -251,7 +251,7 @@ public final class VersionInstaller {
         return connection;
     }
 
-    private Path safe(String relative) throws IOException {
+    Path safe(String relative) throws IOException {
         Path path = root.resolve(relative).normalize();
         if (!path.startsWith(root) || path.equals(root)) throw new IOException("Некорректный путь файла версии.");
         for (Path current = path; current != null && current.startsWith(root); current = current.getParent()) {

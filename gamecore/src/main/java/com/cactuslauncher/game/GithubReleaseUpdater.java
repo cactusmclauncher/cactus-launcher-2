@@ -164,7 +164,7 @@ public final class GithubReleaseUpdater {
         return value != null && value.matches("[A-Za-z0-9._-]{1,180}");
     }
 
-    private static String checksum(String body, String assetName) throws IOException {
+    static String checksum(String body, String assetName) throws IOException {
         for (String line : body.split("\\R")) {
             String trimmed = line.trim();
             String[] fields = trimmed.split("\\s+", 2);
