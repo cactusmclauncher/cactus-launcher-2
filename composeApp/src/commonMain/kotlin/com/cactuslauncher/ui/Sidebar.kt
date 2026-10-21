@@ -48,6 +48,7 @@ fun Sidebar(
     onTogglePlayer: () -> Unit,
     profileName: String,
     onOpenProfiles: () -> Unit,
+    profileAvatar: androidx.compose.ui.graphics.ImageBitmap? = null,
 ) {
     val paneWidth by animateDpAsState(if (playerExpanded) 340.dp else 240.dp, tween(220, easing = CactusMotion.easeOut), label = "player-pane")
     Column(
@@ -66,12 +67,7 @@ fun Sidebar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(C.track),
-            )
+            ProfileAvatar(profileName, profileAvatar, 36.dp)
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 T("$profileName ▾", 15, C.text1, lineHeight = 18, maxLines = 1)
                 T("Офлайн-профиль", 12, C.text2, lineHeight = 15)

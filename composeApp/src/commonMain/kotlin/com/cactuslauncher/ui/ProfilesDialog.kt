@@ -29,6 +29,8 @@ fun ProfilesDialog(
     advancedMode: Boolean = false,
     onSignInExternal: (String, String, String) -> Unit = { _, _, _ -> },
     onSignOutExternal: () -> Unit = {},
+    onChooseAvatar: (String) -> Unit = {},
+    onRemoveAvatar: (String) -> Unit = {},
 ) {
     var name by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<PlayerProfile?>(null) }
@@ -39,7 +41,10 @@ fun ProfilesDialog(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val valid = isValidPlayerName(name)
-    LaunchedEffect(snapshot) { if (!busy && error == null) { name = ""; editing = null; deleting = null } }
+    // Keyed on ids and names only: changing a picture keeps the edit panel open (bitmaps are never equal between loads).
+    LaunchedEffect(snapshot?.let { current -> current.activeId to current.profiles.map { it.id to it.name } }) {
+        if (!busy && error == null) { name = ""; editing = null; deleting = null }
+    }
     LaunchedEffect(externalAccountName) {
         if (externalAccountName != null) {
             password = ""
@@ -69,7 +74,7 @@ fun ProfilesDialog(
                 snapshot?.profiles?.forEach { profile ->
                     val active = profile.id == snapshot.activeId
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (active) C.accentSoft else C.input).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        BuildArtwork(profile.name, if (active) C.accent else C.slate, Modifier.size(40.dp))
+                        ProfileAvatar(profile.name, profile.avatar, 40.dp, Modifier.clickNoRipple { if (!busy) onChooseAvatar(profile.id) })
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             T(profile.name, 16, C.text1, FontWeight.Medium, lineHeight = 20)
                             T(if (active) "Активный, офлайн" else "Офлайн-профиль", 12, C.text2, lineHeight = 15)
@@ -126,6 +131,18 @@ fun ProfilesDialog(
                         T("Переименование профиля", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                         SearchBox(name, { name = it }, "Имя игрока", Modifier.fillMaxWidth(), height = 44.dp)
                         T("3–16 символов: A–Z, a–z, 0–9 и _", 12, C.text2, lineHeight = 15)
+                        snapshot?.profiles?.find { it.id == editing?.id }?.let { current ->
+                            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                ProfileAvatar(current.name, current.avatar, 40.dp)
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    T(if (current.avatar == null) "Выбрать картинку" else "Сменить картинку", 14, C.accent, FontWeight.Medium, lineHeight = 18,
+                                        modifier = Modifier.clickNoRipple { if (!busy) onChooseAvatar(current.id) })
+                                    if (current.avatar != null) T("Убрать картинку", 12, C.danger, lineHeight = 15,
+                                        modifier = Modifier.clickNoRipple { if (!busy) onRemoveAvatar(current.id) })
+                                    else T("PNG или JPG до 5 МБ, обрежется до квадрата", 12, C.text2, lineHeight = 15)
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -8,7 +8,10 @@ import java.util.*;
 
 /** Local offline profiles; no passwords or Microsoft credentials are stored. */
 public final class ProfileStore {
-    public record Profile(String id, String name) {}
+    /** {@code avatar}: content hash of the stored picture (see {@link ProfileAvatars}), or null for none. */
+    public record Profile(String id, String name, String avatar) {
+        public Profile(String id, String name) { this(id, name, null); }
+    }
     public record Snapshot(List<Profile> profiles, String activeId) {}
     private final Path file;
 
@@ -39,7 +42,9 @@ public final class ProfileStore {
             String name = p.getProperty("profile." + id);
             if (name == null || !name.matches("[A-Za-z0-9_]{3,16}") || !names.add(name.toLowerCase(Locale.ROOT)))
                 throw new IOException("Файл профилей повреждён. Исходный файл сохранён.");
-            profiles.add(new Profile(id, name));
+            // Optional key added with profile pictures; older files simply have none. A malformed value is ignored.
+            String avatar = p.getProperty("avatar." + id);
+            profiles.add(new Profile(id, name, avatar != null && avatar.matches("[0-9a-f]{8,64}") ? avatar : null));
         }
         if (profiles.isEmpty()) throw new IOException("В файле профилей отсутствуют профили.");
         String active = p.getProperty("active", profiles.getFirst().id());
@@ -64,7 +69,18 @@ public final class ProfileStore {
         requireProfile(old, id);
         String valid = validate(name, old.profiles(), id);
         Snapshot next = new Snapshot(old.profiles().stream()
-            .map(it -> it.id().equals(id) ? new Profile(id, valid) : it).toList(), old.activeId());
+            .map(it -> it.id().equals(id) ? new Profile(id, valid, it.avatar()) : it).toList(), old.activeId());
+        save(next);
+        return next;
+    }
+
+    /** Sets or, with null, removes the picture reference of profile {@code id}. */
+    public synchronized Snapshot setAvatar(String id, String avatar) throws IOException {
+        if (avatar != null && !avatar.matches("[0-9a-f]{8,64}")) throw new IllegalArgumentException("Некорректная картинка профиля.");
+        Snapshot old = load();
+        requireProfile(old, id);
+        Snapshot next = new Snapshot(old.profiles().stream()
+            .map(it -> it.id().equals(id) ? new Profile(id, it.name(), avatar) : it).toList(), old.activeId());
         save(next);
         return next;
     }
@@ -106,7 +122,10 @@ public final class ProfileStore {
         Properties p = new Properties();
         p.setProperty("active", snapshot.activeId());
         p.setProperty("order", String.join(",", snapshot.profiles().stream().map(Profile::id).toList()));
-        for (Profile profile : snapshot.profiles()) p.setProperty("profile." + profile.id(), profile.name());
+        for (Profile profile : snapshot.profiles()) {
+            p.setProperty("profile." + profile.id(), profile.name());
+            if (profile.avatar() != null) p.setProperty("avatar." + profile.id(), profile.avatar());
+        }
         Path temp = Files.createTempFile(file.getParent(), "profiles-", ".tmp");
         try {
             try (OutputStream output = Files.newOutputStream(temp)) { p.store(output, "Cactus Launcher offline profiles"); }

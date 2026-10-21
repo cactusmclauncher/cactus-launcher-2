@@ -1,7 +1,9 @@
 import Foundation
 
-// The Swift interpreter can read MediaRemote sessions on macOS releases where
-// standalone helpers receive an empty dictionary. Keep one interpreter alive.
+// Compiled at build time into the CactusNowPlaying helper (composeApp/build.gradle.kts, macOS hosts only)
+// and started once by MacAudioMixer; it answers NOW_PLAYING requests over stdin/stdout.
+// Note: newer macOS releases may return an empty dictionary to non-Apple binaries; the launcher then
+// falls back to Spotify/browser AppleScript lookups.
 let handle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY)
 typealias Getter = @convention(c) (DispatchQueue, @escaping @convention(block) (NSDictionary?) -> Void) -> Void
 let symbol = handle.flatMap { dlsym($0, "MRMediaRemoteGetNowPlayingInfo") }

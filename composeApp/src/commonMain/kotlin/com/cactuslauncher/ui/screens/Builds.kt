@@ -57,6 +57,7 @@ import com.cactuslauncher.ui.BuildArtwork
 import com.cactuslauncher.ui.InstanceArtwork
 import com.cactuslauncher.ui.BuildIconPicker
 import com.cactuslauncher.model.LauncherBuild
+import com.cactuslauncher.model.ModUpdateBackup
 import com.cactuslauncher.model.JavaOptimizationPlan
 import com.cactuslauncher.model.JavaOptimizationInfo
 import com.cactuslauncher.ui.MemoryWarning
@@ -67,7 +68,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 @Composable
-fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Boolean = false, error: String? = null, memoryGb: Int = 4, automaticMemory: Boolean = true, javaPlan: JavaOptimizationPlan? = null, javaPlanLoading: Boolean = false, javaOptimizationInfo: JavaOptimizationInfo? = null, resourcePacks: List<InstalledResourcePack> = emptyList(), resourcePacksLoading: Boolean = false, resourcePacksError: String? = null, onImportResourcePack: () -> Unit = {}, onToggleResourcePack: (InstalledResourcePack, Boolean) -> Unit = { _, _ -> }, onOpenResourcePacks: () -> Unit = {}, onRefreshResourcePacks: () -> Unit = {}, onMemoryChange: (Int) -> Unit = {}, onAutomaticMemoryChange: (Boolean) -> Unit = {}, onIcon: (String) -> Unit = {}, onRename: (String) -> Unit = {}, onDelete: (Boolean) -> Unit = {}, onOpenFolder: () -> Unit = {}, onBack: () -> Unit, onPlay: () -> Unit, onNewBuild: () -> Unit, onOpenLogs: () -> Unit = {}, onOpenMods: () -> Unit = {}) {
+fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Boolean = false, error: String? = null, memoryGb: Int = 4, automaticMemory: Boolean = true, javaPlan: JavaOptimizationPlan? = null, javaPlanLoading: Boolean = false, javaOptimizationInfo: JavaOptimizationInfo? = null, resourcePacks: List<InstalledResourcePack> = emptyList(), resourcePacksLoading: Boolean = false, resourcePacksError: String? = null, onImportResourcePack: () -> Unit = {}, onToggleResourcePack: (InstalledResourcePack, Boolean) -> Unit = { _, _ -> }, onOpenResourcePacks: () -> Unit = {}, onRefreshResourcePacks: () -> Unit = {}, onMemoryChange: (Int) -> Unit = {}, onAutomaticMemoryChange: (Boolean) -> Unit = {}, onIcon: (String) -> Unit = {}, onRename: (String) -> Unit = {}, onDelete: (Boolean) -> Unit = {}, onOpenFolder: () -> Unit = {}, onAutoUpdateMods: (Boolean) -> Unit = {}, lastModUpdate: ModUpdateBackup? = null, rollingBackMods: Boolean = false, onRollbackMods: () -> Unit = {}, onBack: () -> Unit, onPlay: () -> Unit, onNewBuild: () -> Unit, onOpenLogs: () -> Unit = {}, onOpenMods: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Обзор", "Моды", "Ресурспаки", "Настройки", "Логи")
 
@@ -141,7 +142,7 @@ fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Bool
         when (tab) {
             0 -> OverviewTab(build, if (automaticMemory) javaPlan?.heapGb ?: memoryGb else memoryGb, automaticMemory, onOpenMods)
             2 -> PacksTab(resourcePacks, resourcePacksLoading, resourcePacksError, onImportResourcePack, onToggleResourcePack, onOpenResourcePacks, onRefreshResourcePacks)
-            else -> BuildSettingsTab(build, busy, memoryGb, automaticMemory, javaPlan, javaPlanLoading, javaOptimizationInfo, onMemoryChange, onAutomaticMemoryChange, onIcon, onRename, onDelete, onOpenFolder)
+            else -> BuildSettingsTab(build, busy, memoryGb, automaticMemory, javaPlan, javaPlanLoading, javaOptimizationInfo, onMemoryChange, onAutomaticMemoryChange, onIcon, onRename, onDelete, onOpenFolder, onAutoUpdateMods, lastModUpdate, rollingBackMods, onRollbackMods)
         }
     }
 }
@@ -164,6 +165,7 @@ private fun ColumnScope.OverviewTab(build: LauncherBuild, memoryGb: Int, automat
             InfoLine("Загрузчик", build.loader)
             InfoLine("Память", "$memoryGb ГБ${if (automaticMemory) ", авто" else ""}")
             InfoLine("Последний запуск", build.lastPlayed)
+            InfoLine("Время в игре", build.playtime.ifBlank { "Пока не считалось" })
         }
         Column(
             Modifier
@@ -256,7 +258,7 @@ private fun ColumnScope.PacksTab(packs: List<InstalledResourcePack>, loading: Bo
 }
 
 @Composable
-private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, memoryGb: Int, automaticMemory: Boolean, javaPlan: JavaOptimizationPlan?, javaPlanLoading: Boolean, javaOptimizationInfo: JavaOptimizationInfo?, onMemoryChange: (Int) -> Unit, onAutomaticMemoryChange: (Boolean) -> Unit, onIcon: (String) -> Unit, onRename: (String) -> Unit, onDelete: (Boolean) -> Unit, onOpenFolder: () -> Unit) {
+private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, memoryGb: Int, automaticMemory: Boolean, javaPlan: JavaOptimizationPlan?, javaPlanLoading: Boolean, javaOptimizationInfo: JavaOptimizationInfo?, onMemoryChange: (Int) -> Unit, onAutomaticMemoryChange: (Boolean) -> Unit, onIcon: (String) -> Unit, onRename: (String) -> Unit, onDelete: (Boolean) -> Unit, onOpenFolder: () -> Unit, onAutoUpdateMods: (Boolean) -> Unit, lastModUpdate: ModUpdateBackup?, rollingBackMods: Boolean, onRollbackMods: () -> Unit) {
     val jvmArguments = remember(javaPlan) {
         javaPlan?.let { plan ->
             (listOf("-Xmx${plan.heapGb}G") + plan.arguments.filterNot {
@@ -285,6 +287,20 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
                 modifier = Modifier.clickNoRipple { if (!busy) onRename(name) })
             BuildIconPicker(build, busy, onIcon)
             SettingRow("Папка сборки") { T("Открыть", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple { if (!busy) onOpenFolder() }) }
+        }
+        if (!build.loader.equals("Vanilla", ignoreCase = true)) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            T("МОДЫ", 13, C.text2, lineHeight = 16)
+            SettingRow("Обновлять моды перед запуском") {
+                com.cactuslauncher.ui.Switch(build.autoUpdateMods, horizontalInset = 4.dp) { if (!busy) onAutoUpdateMods(it) }
+            }
+            T("Перед каждым запуском лаунчер ставит совместимые обновления с Modrinth, старые файлы сохраняются для отката. Без интернета игра запустится как обычно.", 13, C.text2, lineHeight = 18)
+            lastModUpdate?.let { backup ->
+                val files = backup.replaced + backup.added
+                SettingRow("Последнее обновление модов (${backup.createdShort}, $files ${filesWord(files)})") {
+                    T(if (rollingBackMods) "Откатываем…" else "Откатить", 15, if (busy || rollingBackMods) C.text2 else C.accent, FontWeight.Medium, lineHeight = 18,
+                        modifier = Modifier.clickNoRipple { if (!busy && !rollingBackMods) onRollbackMods() })
+                }
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             T("ПРОИЗВОДИТЕЛЬНОСТЬ", 13, C.text2, lineHeight = 16)
@@ -410,6 +426,17 @@ private fun jvmArgumentKey(argument: String): String = when {
     argument.startsWith("-Xss") -> "-Xss"
     argument.startsWith("-D") -> argument.substringBefore('=')
     else -> argument
+}
+
+private fun filesWord(count: Int): String {
+    val lastTwo = count % 100
+    val last = count % 10
+    return when {
+        lastTwo in 11..14 -> "файлов"
+        last == 1 -> "файл"
+        last in 2..4 -> "файла"
+        else -> "файлов"
+    }
 }
 
 @Composable

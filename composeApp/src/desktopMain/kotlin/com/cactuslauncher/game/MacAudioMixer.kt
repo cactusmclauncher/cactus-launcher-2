@@ -25,6 +25,8 @@ internal class MacAudioMixer {
     private var output: BufferedReader? = null
     @Volatile private var metadataProcess: Process? = null
     @Volatile private var playerEnabled = true
+    /** Set once the Now Playing helper is missing or cannot start; the system track is then skipped. */
+    @Volatile private var nowPlayingUnavailable = false
     private var metadataInput: BufferedWriter? = null
     private var metadataOutput: BufferedReader? = null
     private val metadataLock = Any()
@@ -165,32 +167,35 @@ internal class MacAudioMixer {
         if (metadataProcess?.isAlive != true) {
             metadataInput?.close()
             metadataOutput?.close()
-            val script = Files.createTempFile("cactus-now-playing-", ".swift")
-            try {
-                val resource = javaClass.getResourceAsStream("/NowPlaying.swift")
-                    ?: throw IOException("Не найден скрипт Now Playing.")
-                resource.use { Files.copy(it, script, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
-                script.toFile().deleteOnExit()
-                metadataProcess = ProcessBuilder("/usr/bin/swift", script.toString())
-                    .redirectError(ProcessBuilder.Redirect.DISCARD).start().also {
-                        metadataInput = it.outputStream.bufferedWriter(StandardCharsets.UTF_8)
-                        metadataOutput = it.inputStream.bufferedReader(StandardCharsets.UTF_8)
-                    }
-            } catch (error: Exception) {
-                Files.deleteIfExists(script)
-                throw error
+            // No helper in this build (non-macOS build host) or it cannot start: system Now Playing stays off
+            // and currentTrack() falls back to AppleScript. Never start /usr/bin/swift: without Xcode CLT
+            // it shows the "install command line tools" dialog.
+            if (nowPlayingUnavailable) return@runCatching null
+            val helper = try { extractNowPlayingHelper() } catch (_: Exception) { null }
+            if (helper == null) {
+                nowPlayingUnavailable = true
+                return@runCatching null
             }
+            val started = try {
+                ProcessBuilder(helper.toString()).redirectError(ProcessBuilder.Redirect.DISCARD).start()
+            } catch (_: IOException) {
+                nowPlayingUnavailable = true
+                return@runCatching null
+            }
+            metadataInput = started.outputStream.bufferedWriter(StandardCharsets.UTF_8)
+            metadataOutput = started.inputStream.bufferedReader(StandardCharsets.UTF_8)
+            metadataProcess = started
         }
         metadataInput!!.apply { write("NOW_PLAYING"); newLine(); flush() }
         val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(25)
         while (!metadataOutput!!.ready()) {
             if (metadataProcess?.isAlive != true || System.nanoTime() >= deadline) {
                 metadataProcess?.destroyForcibly()
-                throw IOException("Скрипт Now Playing не ответил вовремя.")
+                throw IOException("Helper Now Playing не ответил вовремя.")
             }
             Thread.sleep(20)
         }
-        val fields = (metadataOutput!!.readLine() ?: throw IOException("Скрипт Now Playing завершился.")).split('\t')
+        val fields = (metadataOutput!!.readLine() ?: throw IOException("Helper Now Playing завершился.")).split('\t')
         if (fields.firstOrNull() != "NOW_PLAYING" || fields.size != 7) return@runCatching null
         if (fields[6] != cachedSystemArtworkData) {
             cachedSystemArtwork = fields[6].takeIf { it.isNotBlank() }?.let { data ->
@@ -306,6 +311,32 @@ internal class MacAudioMixer {
             input = BufferedWriter(OutputStreamWriter(child.outputStream, StandardCharsets.UTF_8))
             output = BufferedReader(InputStreamReader(child.inputStream, StandardCharsets.UTF_8))
         }
+    }
+
+    /**
+     * Copies the bundled CactusNowPlaying executable to a per-content temp folder and returns it,
+     * or null if this build has no helper (it is compiled only on macOS build hosts).
+     */
+    private fun extractNowPlayingHelper(): Path? {
+        val bytes = javaClass.getResourceAsStream("/CactusNowPlaying")?.use { it.readBytes() } ?: return null
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+        val version = java.util.HexFormat.of().formatHex(digest, 0, 8)
+        val executable = Path.of(System.getProperty("java.io.tmpdir"), "cactus-launcher-now-playing", version, "CactusNowPlaying")
+        if (Files.isSymbolicLink(executable.parent) || Files.isSymbolicLink(executable)) return null
+        if (Files.isRegularFile(executable, java.nio.file.LinkOption.NOFOLLOW_LINKS) && Files.isExecutable(executable) &&
+            java.security.MessageDigest.isEqual(java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(executable)), digest)) {
+            return executable
+        }
+        Files.createDirectories(executable.parent)
+        val temporary = Files.createTempFile(executable.parent, "now-playing-", ".part")
+        try {
+            Files.write(temporary, bytes)
+            if (!temporary.toFile().setExecutable(true, true)) return null
+            Files.move(temporary, executable, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+        return executable
     }
 
     private fun extractHelperBundle(): Path {

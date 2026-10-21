@@ -1,756 +1,209 @@
 package com.cactuslauncher
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
-import com.cactuslauncher.model.ProfileSnapshot
-import com.cactuslauncher.ui.ProfilesDialog
-import com.cactuslauncher.ui.MotionOverlay
-import com.cactuslauncher.ui.CactusMotion
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.runtime.setValue
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
-import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-import com.cactuslauncher.ui.T
-import com.cactuslauncher.ui.clickNoRipple
-import com.cactuslauncher.ui.LauncherSettings
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.cactuslauncher.game.GameService
-import com.cactuslauncher.model.TrackSnapshot
-import com.cactuslauncher.model.JavaOptimizationInfo
-import com.cactuslauncher.game.TrackCommand
 import com.cactuslauncher.model.Dest
-import com.cactuslauncher.model.LauncherBuild
-import com.cactuslauncher.model.ModrinthProject
-import com.cactuslauncher.model.ModHelperIssue
-import com.cactuslauncher.model.ModSecurityReport
-import com.cactuslauncher.model.LauncherUpdate
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.graphics.ImageBitmap
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import com.cactuslauncher.ui.screens.BuildListScreen
+import com.cactuslauncher.state.AppMessages
+import com.cactuslauncher.state.BuildsState
+import com.cactuslauncher.state.LogsState
+import com.cactuslauncher.state.ModsState
+import com.cactuslauncher.state.NavigationState
+import com.cactuslauncher.state.PlayerState
+import com.cactuslauncher.state.PreferencesState
+import com.cactuslauncher.state.ProfilesState
+import com.cactuslauncher.state.ScreenshotsState
+import com.cactuslauncher.state.UpdatesState
 import com.cactuslauncher.theme.AppFontProvider
 import com.cactuslauncher.theme.C
-import com.cactuslauncher.ui.ModHelperDialog
-import com.cactuslauncher.ui.NewBuildDialog
-import com.cactuslauncher.ui.SettingsDialog
+import com.cactuslauncher.ui.CactusMotion
 import com.cactuslauncher.ui.InitialSetupDialog
+import com.cactuslauncher.ui.ModHelperDialog
+import com.cactuslauncher.ui.MotionOverlay
+import com.cactuslauncher.ui.NewBuildDialog
+import com.cactuslauncher.ui.ProfilesDialog
+import com.cactuslauncher.ui.SettingsDialog
 import com.cactuslauncher.ui.Sidebar
-import com.cactuslauncher.ui.screens.BuildManageScreen
+import com.cactuslauncher.ui.T
+import com.cactuslauncher.ui.clickNoRipple
+import com.cactuslauncher.ui.screens.OtherScreen
+import com.cactuslauncher.model.OtherSection
+import com.cactuslauncher.ui.screens.ServersSectionState
+import com.cactuslauncher.state.ServersState
+import com.cactuslauncher.ui.screens.ScreenshotViewer
+import com.cactuslauncher.ui.screens.ScreenshotsSectionState
+import com.cactuslauncher.ui.screens.BuildListScreen
 import com.cactuslauncher.ui.screens.BuildLogsScreen
+import com.cactuslauncher.ui.screens.BuildManageScreen
 import com.cactuslauncher.ui.screens.HomeScreen
 import com.cactuslauncher.ui.screens.ModsCatalogScreen
 import com.cactuslauncher.ui.screens.NewsReader
 import com.cactuslauncher.ui.screens.NewsScreen
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
+/**
+ * Root composable: wires the per-area state holders (package [com.cactuslauncher.state]) to screens and dialogs.
+ * Effects stay here because their keys are Compose state; the work itself lives in the holders.
+ */
 @Composable
 fun App(game: GameService, onGhostMode: () -> Unit) {
     val pageOffset = with(LocalDensity.current) { 6.dp.roundToPx() }
-    var profiles by remember { mutableStateOf<ProfileSnapshot?>(null) }
-    var profilesOpen by remember { mutableStateOf(false) }
-    var profilesBusy by remember { mutableStateOf(false) }
-    var profilesError by remember { mutableStateOf<String?>(null) }
-    var externalAccountName by remember { mutableStateOf(game.externalAccountName()) }
-    var externalApiRoot by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    fun profileOperation(operation: suspend () -> ProfileSnapshot) {
-        if (profilesBusy) return
-        profilesBusy = true
-        profilesError = null
-        scope.launch {
-            try { profiles = operation() }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { profilesError = e.message ?: "Не удалось сохранить профили." }
-            finally { profilesBusy = false }
-        }
-    }
-    LaunchedEffect(Unit) { profileOperation { game.profiles() } }
-    val preferences = remember { LauncherSettings(game.gameDir()) }
+    val messages = remember { AppMessages(game) }
+    val navigation = remember { NavigationState() }
+    val settings = remember { PreferencesState(game, messages) }
+    val preferences = settings.preferences
+    val profiles = remember { ProfilesState(game, scope, messages) }
+    val updates = remember { UpdatesState(game) }
+    val builds = remember { BuildsState(game, scope, preferences, profiles, messages) }
+    val mods = remember { ModsState(game, scope, preferences, builds, navigation, messages) }
+    val logs = remember { LogsState(game, scope, preferences, profiles, messages) }
+    val player = remember { PlayerState(game, scope) { preferences.showPlayer } }
+    val screenshots = remember { ScreenshotsState(game, scope, builds, messages) }
+    val servers = remember { ServersState(game, scope, builds, messages) }
+    val otherSection = navigation.otherSection
+    var otherOverview by remember { mutableStateOf<com.cactuslauncher.model.OtherOverview?>(null) }
+
+    LaunchedEffect(Unit) { profiles.operation { game.profiles() } }
     val systemDark = isSystemInDarkTheme()
     val darkTheme = when (preferences.theme) { "dark" -> true; "light" -> false; else -> systemDark }
     SideEffect { C.dark = darkTheme }
-    var settingsReady by remember { mutableStateOf(false) }
-    var firstSetupOpen by remember { mutableStateOf(false) }
-    var settingsLoadFailed by remember { mutableStateOf(false) }
-    var preferencesError by remember { mutableStateOf<String?>(null) }
-    var launcherUpdate by remember { mutableStateOf<LauncherUpdate?>(null) }
-    var launcherUpdateFile by remember { mutableStateOf<String?>(null) }
-    var launcherUpdateStatus by remember { mutableStateOf<String?>(null) }
-    var launcherUpdateBusy by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        try {
-            val saved = game.loadPreferences()
-            if (saved == null) firstSetupOpen = true
-            else {
-                preferences.restore(saved)
-                firstSetupOpen = !saved.setupComplete
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            settingsLoadFailed = true
-            preferencesError = e.message ?: "Не удалось прочитать настройки."
-            firstSetupOpen = true
-        } finally {
-            settingsReady = true
-        }
+    LaunchedEffect(Unit) { settings.load() }
+    LaunchedEffect(settings.settingsReady, settings.settingsLoadFailed, settings.preferencesError,
+        preferences.snapshot(!settings.firstSetupOpen)) { settings.save() }
+    LaunchedEffect(settings.settingsReady, settings.settingsLoadFailed, preferences.autoUpdate) {
+        if (settings.settingsReady && !settings.settingsLoadFailed && preferences.autoUpdate) updates.check(download = true)
     }
-    LaunchedEffect(settingsReady, settingsLoadFailed, preferencesError, preferences.snapshot(!firstSetupOpen)) {
-        if (!settingsReady || settingsLoadFailed) return@LaunchedEffect
-        try {
-            game.savePreferences(preferences.snapshot(!firstSetupOpen))
-            preferencesError = null
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            preferencesError = e.message ?: "Не удалось сохранить настройки."
-        }
-    }
-    suspend fun checkLauncherUpdates(download: Boolean) {
-        if (launcherUpdateBusy) return
-        launcherUpdateBusy = true
-        launcherUpdateStatus = "Проверяем обновления…"
-        try {
-            val result = game.checkLauncherUpdate()
-            launcherUpdate = result
-            launcherUpdateFile = null
-            if (!result.available) {
-                launcherUpdateStatus = "Установлена последняя версия."
-            } else if (download) {
-                launcherUpdateStatus = "Скачиваем версию ${result.latestVersion}…"
-                launcherUpdateFile = game.downloadLauncherUpdate()
-                launcherUpdateStatus = "Версия ${result.latestVersion} готова к установке."
-            } else {
-                launcherUpdateStatus = "Доступна версия ${result.latestVersion}."
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            launcherUpdateStatus = e.message ?: "Не удалось проверить обновления."
-        } finally {
-            launcherUpdateBusy = false
-        }
-    }
-    LaunchedEffect(settingsReady, settingsLoadFailed, preferences.autoUpdate) {
-        if (settingsReady && !settingsLoadFailed && preferences.autoUpdate) checkLauncherUpdates(download = true)
-    }
-    LaunchedEffect(settingsReady, preferences.automaticMemory) {
-        if (!settingsReady) return@LaunchedEffect
-        if (preferences.automaticMemory) {
-            try {
-                val recommended = game.recommendedMemoryGb()
-                if (preferences.automaticMemory) preferences.memoryGb = recommended
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Keep the safe default if the platform cannot report physical memory.
-            }
-        }
-    }
-    val builds = remember { mutableStateListOf<LauncherBuild>() }
-    val javaPlanRevisions = remember { mutableStateMapOf<String, Int>() }
-    var selectedModsBuildId by remember { mutableStateOf<String?>(null) }
-    var modsCatalogActive by remember { mutableStateOf(false) }
-    var installedMods by remember { mutableStateOf<List<com.cactuslauncher.model.InstalledMod>>(emptyList()) }
-    var installedModsBuildId by remember { mutableStateOf<String?>(null) }
-    var resourcePacks by remember { mutableStateOf<List<com.cactuslauncher.model.InstalledResourcePack>>(emptyList()) }
-    var resourcePacksLoading by remember { mutableStateOf(false) }
-    var resourcePacksError by remember { mutableStateOf<String?>(null) }
-    var modrinthProjects by remember { mutableStateOf<List<com.cactuslauncher.model.ModrinthProject>>(emptyList()) }
-    val modIcons = remember { mutableStateMapOf<String, ImageBitmap>() }
-    val modSecurityReports = remember { mutableStateMapOf<String, ModSecurityReport>() }
-    val scanningModFiles = remember { mutableStateListOf<String>() }
-    val modScanSemaphore = remember { Semaphore(2) }
-    val translatedModDescriptions = remember { mutableStateMapOf<String, String>() }
-    val failedTranslationIds = remember { mutableStateListOf<String>() }
-    var modSearch by remember { mutableStateOf("") }
-    var modActionId by remember { mutableStateOf<String?>(null) }
-    var modsLoading by remember { mutableStateOf(false) }
-    var modCatalogLoading by remember { mutableStateOf(false) }
-    var modsError by remember { mutableStateOf<String?>(null) }
-    var modHelperIssue by remember { mutableStateOf<ModHelperIssue?>(null) }
-    var modHelperOpen by remember { mutableStateOf(false) }
-    var modsReloadKey by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    var modCatalogReloadKey by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    var modCatalogOffset by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    var modCatalogHasMore by remember { mutableStateOf(false) }
-    var modCatalogLoadingMore by remember { mutableStateOf(false) }
-    var modCatalogMoreError by remember { mutableStateOf<String?>(null) }
-    var modCatalogGeneration by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val modInstallQueue = remember { mutableStateListOf<Pair<String, ModrinthProject>>() }
-    val modInstallErrors = remember { mutableStateMapOf<String, String>() }
-    var activeModInstall by remember { mutableStateOf<Pair<String, ModrinthProject>?>(null) }
-    var modInstallWorkerRunning by remember { mutableStateOf(false) }
-    fun enqueueModInstall(buildId: String, project: ModrinthProject) {
-        val key = "$buildId:${project.id}"
-        if (installedModsBuildId == buildId && installedMods.any { it.projectId == project.id }) return
-        if (activeModInstall?.let { it.first == buildId && it.second.id == project.id } == true ||
-            modInstallQueue.any { it.first == buildId && it.second.id == project.id }) return
-        modInstallErrors.remove(key)
-        modInstallQueue.add(buildId to project)
-        if (modInstallWorkerRunning) return
-        modInstallWorkerRunning = true
-        scope.launch {
-            try {
-                while (modInstallQueue.isNotEmpty()) {
-                    val (targetBuildId, nextProject) = modInstallQueue.removeAt(0)
-                    activeModInstall = targetBuildId to nextProject
-                    val requestKey = "$targetBuildId:${nextProject.id}"
-                    try {
-                        game.installMod(targetBuildId, nextProject.id)
-                        javaPlanRevisions[targetBuildId] = (javaPlanRevisions[targetBuildId] ?: 0) + 1
-                        if (selectedModsBuildId == targetBuildId) {
-                            installedMods = game.installedMods(targetBuildId)
-                                            installedModsBuildId = targetBuildId
-                            modsReloadKey++
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        val message = e.message ?: "Не удалось установить мод."
-                        modInstallErrors[requestKey] = message
-                        val normalized = message.lowercase()
-                        val incompatible = normalized.contains("нет совместимой версии мода или зависимости") ||
-                            normalized.contains("версия мода несовместима с minecraft или загрузчиком") ||
-                            normalized.contains("конфликт модов:")
-                        val build = builds.firstOrNull { it.id == targetBuildId }
-                        if (incompatible && build != null) {
-                            val dependencyId = Regex("(?:зависимости|зависимость):\\s*([A-Za-z0-9]{3,64})", RegexOption.IGNORE_CASE)
-                                .find(message)?.groupValues?.getOrNull(1)?.takeUnless { it == nextProject.id }
-                            modHelperIssue = ModHelperIssue(
-                                projectTitle = nextProject.title,
-                                buildName = build.name,
-                                minecraftVersion = build.version,
-                                loader = build.loader,
-                                message = message,
-                                dependencyId = dependencyId,
-                                conflict = normalized.contains("конфликт модов:"),
-                            )
-                            modHelperOpen = true
-                        }
-                    }
-                    activeModInstall = null
-                }
-            } finally {
-                activeModInstall = null
-                modInstallWorkerRunning = false
-            }
-        }
-    }
-    var selectedBuild by remember { mutableStateOf<LauncherBuild?>(null) }
-    var selectedBuildJavaPlan by remember { mutableStateOf<com.cactuslauncher.model.JavaOptimizationPlan?>(null) }
-    var selectedBuildJavaPlanLoading by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedBuild?.id) {
-        val id = selectedBuild?.id
-        if (id == null) {
-            resourcePacks = emptyList()
-            resourcePacksError = null
-            return@LaunchedEffect
-        }
-        resourcePacks = emptyList()
-        resourcePacksLoading = true
-        resourcePacksError = null
-        try { resourcePacks = game.resourcePacks(id) }
-        catch (e: CancellationException) { throw e }
-        catch (e: Exception) { resourcePacksError = e.message ?: "Не удалось прочитать ресурспаки." }
-        finally { resourcePacksLoading = false }
-    }
-    LaunchedEffect(selectedBuild?.id, selectedBuild?.version, selectedBuild?.loader,
-        selectedBuild?.let { javaPlanRevisions[it.id] },
-        preferences.memoryGb, preferences.automaticMemory, preferences.autoJavaOptimization) {
-        val build = selectedBuild
-        if (build == null) {
-            selectedBuildJavaPlan = null
-            selectedBuildJavaPlanLoading = false
-        } else {
-            delay(180)
-            selectedBuildJavaPlan = null
-            selectedBuildJavaPlanLoading = true
-            try {
-                selectedBuildJavaPlan = game.javaOptimizationPlan(
-                    build.id, preferences.memoryGb, preferences.automaticMemory, preferences.autoJavaOptimization,
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                selectedBuildJavaPlan = null
-            } finally {
-                selectedBuildJavaPlanLoading = false
-            }
-        }
-    }
-    var logsBuildId by remember { mutableStateOf<String?>(null) }
-    var logLines by remember { mutableStateOf<List<String>>(emptyList()) }
-    var logsLoading by remember { mutableStateOf(false) }
-    var logsError by remember { mutableStateOf<String?>(null) }
-    var crashDiagnosis by remember { mutableStateOf<com.cactuslauncher.model.CrashDiagnosis?>(null) }
-    var diagnosisLoading by remember { mutableStateOf(false) }
-    var recoveryBusy by remember { mutableStateOf(false) }
-    var recoveryMessage by remember { mutableStateOf<String?>(null) }
-    var runningBuildIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var buildsBusy by remember { mutableStateOf(false) }
-    var buildsError by remember { mutableStateOf<String?>(null) }
-    var buildsLoaded by remember { mutableStateOf(false) }
-    fun buildOperation(operation: suspend () -> List<LauncherBuild>, onSuccess: () -> Unit = {}) {
-        if (buildsBusy) return
-        buildsBusy = true
-        buildsError = null
-        scope.launch {
-            try {
-                val updated = operation()
-                val selectedId = selectedBuild?.id
-                builds.clear()
-                builds.addAll(updated)
-                selectedBuild = updated.find { it.id == selectedId }
-                buildsLoaded = true
-                buildsBusy = false
-                onSuccess()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                buildsError = e.message ?: "Не удалось сохранить сборки."
-            } finally {
-                buildsBusy = false
-            }
-        }
-    }
-    LaunchedEffect(Unit) { buildOperation({ game.builds() }) }
-    var dest by remember { mutableStateOf(Dest.Home) }
-    LaunchedEffect(dest, buildsLoaded, builds.map { it.id }) {
-        if (dest == Dest.Mods && buildsLoaded && builds.none { it.id == selectedModsBuildId }) {
-            selectedModsBuildId = builds.firstOrNull()?.id
-        }
-    }
-    LaunchedEffect(dest, buildsLoaded, selectedModsBuildId, modsReloadKey) {
-        if (dest != Dest.Mods || !buildsLoaded) return@LaunchedEffect
-        val id = selectedModsBuildId
-        if (id == null) {
-            installedMods = emptyList()
-            installedModsBuildId = null
-            modrinthProjects = emptyList()
-            modsLoading = false
-            modsError = null
-            return@LaunchedEffect
-        }
-        installedMods = emptyList()
-        installedModsBuildId = null
-        modsLoading = true
-        modsError = null
-        try {
-            installedMods = game.installedMods(id)
-            installedModsBuildId = id
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            modsError = e.message ?: "Не удалось прочитать папку модов."
-        } finally {
-            modsLoading = false
-        }
-    }
-    LaunchedEffect(installedModsBuildId, installedMods.map { it.fileName }, modsReloadKey, preferences.modAntivirusEnabled) {
-        val buildId = installedModsBuildId ?: return@LaunchedEffect
-        if (buildId != selectedModsBuildId) return@LaunchedEffect
-        if (!preferences.modAntivirusEnabled) return@LaunchedEffect
-        val validKeys = installedMods.mapTo(hashSetOf()) { "$buildId:${it.fileName}" }
-        modSecurityReports.keys.toList()
-            .filter { it.startsWith("$buildId:") && it !in validKeys }
-            .forEach { modSecurityReports.remove(it) }
-        modSecurityReports.keys.toList()
-            .filter { it.startsWith("$buildId:") && modSecurityReports[it]?.level == "error" }
-            .forEach { modSecurityReports.remove(it) }
-        // Scans run in the screen scope: installing a mod changes this effect's keys,
-        // and a restart would cancel a scan halfway.
-        installedMods.filter { it.enabled }.forEach { mod ->
-                val key = "$buildId:${mod.fileName}"
-                if (modSecurityReports.containsKey(key) || key in scanningModFiles) return@forEach
-                scanningModFiles.add(key)
-                scope.launch {
-                    try {
-                        modScanSemaphore.withPermit {
-                            modSecurityReports[key] = game.scanInstalledMod(buildId, mod.fileName)
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        modSecurityReports[key] = ModSecurityReport("error", listOf(e.message ?: "Не удалось проверить JAR."), 0)
-                    } finally {
-                        scanningModFiles.remove(key)
-                    }
-                }
-            }
-    }
-    LaunchedEffect(dest, buildsLoaded, selectedModsBuildId, modSearch, modCatalogReloadKey, modsCatalogActive) {
-        if (dest != Dest.Mods || !modsCatalogActive || !buildsLoaded) {
-            modCatalogLoading = false
-            return@LaunchedEffect
-        }
-        val id = selectedModsBuildId ?: return@LaunchedEffect
-        val build = builds.firstOrNull { it.id == id } ?: return@LaunchedEffect
-        if (build.loader.equals("Vanilla", ignoreCase = true)) {
-            modrinthProjects = emptyList()
-            modCatalogHasMore = false
-            modCatalogLoading = false
-            return@LaunchedEffect
-        }
-        val requestGeneration = modCatalogGeneration + 1
-        modCatalogGeneration = requestGeneration
-        modrinthProjects = emptyList()
-        modCatalogOffset = 0
-        modCatalogHasMore = false
-        modCatalogLoadingMore = false
-        modCatalogMoreError = null
-        modCatalogLoading = true
-        modsError = null
-        try {
-            delay(350)
-            val page = game.searchMods(id, modSearch, 0)
-            if (modCatalogGeneration == requestGeneration && selectedModsBuildId == id) {
-                modrinthProjects = page
-                modCatalogOffset = page.size
-                modCatalogHasMore = page.size == 30 && modCatalogOffset < 10000
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            modsError = e.message ?: "Не удалось загрузить каталог Modrinth."
-        } finally {
-            if (modCatalogGeneration == requestGeneration) modCatalogLoading = false
-        }
-    }
-    fun loadMoreModProjects() {
-        val id = selectedModsBuildId ?: return
-        if (dest != Dest.Mods || !modsCatalogActive || modCatalogLoading || modCatalogLoadingMore ||
-            !modCatalogHasMore) return
-        val query = modSearch
-        val offset = modCatalogOffset
-        val generation = modCatalogGeneration
-        modCatalogLoadingMore = true
-        modCatalogMoreError = null
-        scope.launch {
-            try {
-                val page = game.searchMods(id, query, offset)
-                if (modCatalogGeneration == generation && selectedModsBuildId == id && modSearch == query &&
-                    dest == Dest.Mods && modsCatalogActive) {
-                    val knownIds = modrinthProjects.mapTo(hashSetOf()) { it.id }
-                    modrinthProjects = modrinthProjects + page.filterNot { it.id in knownIds }
-                    modCatalogOffset += page.size
-                    modCatalogHasMore = page.size == 30 && modCatalogOffset < 10000
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (modCatalogGeneration == generation) modCatalogMoreError = e.message ?: "Не удалось загрузить следующую страницу."
-            } finally {
-                if (modCatalogGeneration == generation) modCatalogLoadingMore = false
-            }
-        }
-    }
-    LaunchedEffect(dest, modsCatalogActive, modrinthProjects.map { it.id to it.iconUrl }) {
-        if (dest != Dest.Mods || !modsCatalogActive) return@LaunchedEffect
-        val visibleIds = modrinthProjects.mapTo(hashSetOf()) { it.id }
-        modIcons.keys.toList().filterNot { it in visibleIds }.forEach { modIcons.remove(it) }
-        val icons = modrinthProjects.filter { it.iconUrl.isNotBlank() && !modIcons.containsKey(it.id) }
-        val semaphore = Semaphore(4)
-        coroutineScope {
-            icons.forEach { project -> launch {
-                semaphore.withPermit {
-                    try { game.modIcon(project.iconUrl)?.let { modIcons[project.id] = it } }
-                    catch (e: CancellationException) { throw e }
-                    catch (_: Exception) { }
-                }
-            } }
-        }
-    }
-    LaunchedEffect(dest, modsCatalogActive, preferences.translateModDescriptions, modrinthProjects.map { it.id to it.description }) {
-        if (dest != Dest.Mods || !modsCatalogActive) return@LaunchedEffect
-        if (!preferences.translateModDescriptions) {
-            translatedModDescriptions.clear()
-            failedTranslationIds.clear()
-            return@LaunchedEffect
-        }
-        val visibleIds = modrinthProjects.mapTo(hashSetOf()) { it.id }
-        translatedModDescriptions.keys.toList().filterNot { it in visibleIds }.forEach { translatedModDescriptions.remove(it) }
-        val semaphore = Semaphore(3)
-        coroutineScope {
-            modrinthProjects.filter { it.description.isNotBlank() }.forEach { project -> launch {
-                if (translatedModDescriptions.containsKey(project.id)) return@launch
-                failedTranslationIds.remove(project.id)
-                semaphore.withPermit {
-                    try { translatedModDescriptions[project.id] = game.translateModDescription(project.description) }
-                    catch (e: CancellationException) { throw e }
-                    catch (_: Exception) { failedTranslationIds.add(project.id) }
-                }
-            } }
-        }
-    }
-    LaunchedEffect(dest, buildsLoaded) {
-        if (dest == Dest.Builds && buildsLoaded) {
-            while (isActive) {
-                try { runningBuildIds = game.runningBuildIds() }
-                catch (e: CancellationException) { throw e }
-                catch (_: Exception) { }
-                delay(1000)
-            }
-        }
-    }
-    LaunchedEffect(logsBuildId) {
-        val id = logsBuildId ?: return@LaunchedEffect
-        logsLoading = true
-        logsError = null
-        diagnosisLoading = true
-        crashDiagnosis = null
-        recoveryMessage = null
-        try { crashDiagnosis = game.diagnoseBuild(id) }
-        catch (e: CancellationException) { throw e }
-        catch (_: Exception) { crashDiagnosis = null }
-        finally { diagnosisLoading = false }
-        try {
-            while (isActive && logsBuildId == id) {
-                logLines = game.buildLogs(id)
-                logsLoading = false
-                delay(1500)
-            }
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
-            logsError = e.message ?: "Не удалось прочитать файл логов."
-            logsLoading = false
-        }
-    }
-    var readingNews by remember { mutableStateOf(false) }
-    var readingBeta by remember { mutableStateOf(false) }
-    var settingsOpen by remember { mutableStateOf(false) }
-    var javaOptimizationInfo by remember { mutableStateOf<JavaOptimizationInfo?>(null) }
-    LaunchedEffect(settingsOpen, selectedBuild?.id) {
-        if (settingsOpen || selectedBuild != null) {
-            try {
-                val info = game.javaOptimizationInfo()
-                javaOptimizationInfo = info
-                if (preferences.memoryGb > info.maxMemoryGb) preferences.memoryGb = info.maxMemoryGb
-            }
-            catch (e: CancellationException) { throw e }
-            catch (_: Exception) { javaOptimizationInfo = null }
-        }
-    }
-    var newBuildOpen by remember { mutableStateOf(false) }
-    var playerExpanded by remember { mutableStateOf(false) }
-    var currentTrack by remember { mutableStateOf<TrackSnapshot?>(null) }
-    var trackError by remember { mutableStateOf<String?>(null) }
-    var trackCommandBusy by remember { mutableStateOf(false) }
-    LaunchedEffect(preferences.showPlayer) {
-        if (!preferences.showPlayer) {
-            currentTrack = null
-            trackError = null
-            playerExpanded = false
-        }
-        game.setPlayerEnabled(preferences.showPlayer)
-    }
-    LaunchedEffect(preferences.showPlayer) {
-        if (preferences.showPlayer) {
-            // Let the first frame and profile loading complete before starting Swift.
-            delay(600)
-            while (isActive) {
-                try {
-                    val track = game.currentTrack()
-                    if (preferences.showPlayer && !trackCommandBusy) {
-                        currentTrack = track
-                        trackError = null
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    trackError = e.message ?: "Не удалось получить информацию о треке."
-                }
-                delay(if (currentTrack != null) 500 else 2000)
-            }
-        }
-    }
-    LaunchedEffect(currentTrack) {
-        if (currentTrack == null) playerExpanded = false
-    }
-    var notice by remember { mutableStateOf<String?>(null) }
-    var launchFailure by remember { mutableStateOf<Pair<String, String>?>(null) }
-    suspend fun refreshBuilds() {
-        try {
-            val updated = game.builds()
-            val selectedId = selectedBuild?.id
-            builds.clear()
-            builds.addAll(updated)
-            selectedBuild = updated.find { it.id == selectedId }
-        } catch (e: CancellationException) { throw e }
-        catch (_: Exception) { }
-    }
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            try {
-                val failures = game.takeLaunchFailures()
-                if (failures.isNotEmpty()) {
-                    launchFailure = failures.last()
-                    runningBuildIds = game.runningBuildIds()
-                }
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { }
-            delay(1500)
-        }
-    }
-    var installBuild by remember { mutableStateOf<LauncherBuild?>(null) }
-    var installProgress by remember { mutableStateOf(com.cactuslauncher.model.InstallProgress()) }
-    var installBusy by remember { mutableStateOf(false) }
-    var installPaused by remember { mutableStateOf(false) }
-    var installError by remember { mutableStateOf<String?>(null) }
-    var installJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    fun startInstall(build: LauncherBuild) {
-        if (installBusy || buildsBusy) return
-        installBuild = build
-        installBusy = true
-        installPaused = false
-        buildsBusy = true
-        installError = null
-        installProgress = com.cactuslauncher.model.InstallProgress()
-        installJob = scope.launch {
-            val updates = kotlinx.coroutines.channels.Channel<com.cactuslauncher.model.InstallProgress>(kotlinx.coroutines.channels.Channel.CONFLATED)
-            val collector = launch { for (update in updates) installProgress = update }
-            try {
-                game.installBuild(build.id, preferences.parallelDownloads) { updates.trySend(it) }
-                updates.close()
-                collector.join()
-                val refreshed = game.builds()
-                builds.clear()
-                builds.addAll(refreshed)
-                selectedBuild = refreshed.find { it.id == selectedBuild?.id }
-                installProgress = installProgress.copy(fraction = 1f)
-            } catch (e: CancellationException) {
-                installError = "Скачивание отменено. Уже скачанные файлы пригодятся в следующий раз."
-                throw e
-            } catch (e: Exception) {
-                installError = e.message ?: "Не удалось скачать версию."
-            } finally {
-                updates.close()
-                collector.cancel()
-                installBusy = false
-                buildsBusy = false
-            }
-        }
-    }
-    fun playBuild(build: LauncherBuild) {
-        if (buildsBusy || build.id in runningBuildIds) return
-        if (!build.installed) { startInstall(build); return }
-        buildsBusy = true
-        scope.launch {
-            try {
-                val enteredGhostMode = game.launchBuild(
-                    build.id, preferences.memoryGb, externalApiRoot.takeIf { externalAccountName != null },
-                    preferences.automaticMemory, preferences.autoJavaOptimization, preferences.ghostMode,
-                )
-                if (enteredGhostMode) {
-                    onGhostMode()
-                    return@launch
-                }
-                runningBuildIds = game.runningBuildIds()
-                notice = "Процесс Minecraft запущен."
-                launchFailure = null
-                refreshBuilds()
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) {
-                launchFailure = build.id to (e.message ?: "Не удалось запустить Minecraft.")
-                refreshBuilds()
-            }
-            finally { buildsBusy = false }
-        }
-    }
-    LaunchedEffect(notice) { if (notice != null) { delay(4000); notice = null } }
+    LaunchedEffect(settings.settingsReady, preferences.automaticMemory) { settings.applyRecommendedMemory() }
 
-    val selectedInstalledMods = if (installedModsBuildId == selectedModsBuildId) installedMods else emptyList()
+    LaunchedEffect(builds.selectedBuild?.id) { builds.loadResourcePacks(builds.selectedBuild?.id) }
+    LaunchedEffect(builds.selectedBuild?.id, builds.selectedBuild?.version, builds.selectedBuild?.loader,
+        builds.selectedBuild?.let { builds.javaPlanRevisions[it.id] },
+        preferences.memoryGb, preferences.automaticMemory, preferences.autoJavaOptimization) {
+        builds.loadJavaPlan(builds.selectedBuild)
+    }
+    LaunchedEffect(Unit) { builds.operation({ game.builds() }) }
+
+    LaunchedEffect(navigation.dest, builds.loaded, builds.builds.map { it.id }) {
+        if (navigation.dest == Dest.Mods && builds.loaded) mods.ensureSelection()
+    }
+    LaunchedEffect(navigation.dest, builds.loaded, mods.selectedBuildId, mods.reloadKey) {
+        if (navigation.dest == Dest.Mods && builds.loaded) mods.loadInstalled()
+    }
+    LaunchedEffect(mods.installedModsBuildId, mods.installedMods.map { it.fileName }, mods.reloadKey, preferences.modAntivirusEnabled) {
+        mods.scanSecurity()
+    }
+    LaunchedEffect(mods.installedModsBuildId, mods.installedMods, mods.reloadKey) { mods.checkProblems() }
+    LaunchedEffect(navigation.dest, builds.loaded, builds.builds.map { it.id }) {
+        if (navigation.dest == Dest.Other && builds.loaded) {
+            screenshots.ensureSelection()
+            servers.ensureSelection()
+        }
+    }
+    LaunchedEffect(navigation.dest, otherSection, builds.loaded, screenshots.selectedBuildId) {
+        if (navigation.dest == Dest.Other && otherSection == OtherSection.Screenshots && builds.loaded) screenshots.watch()
+    }
+    // The menu's numbers are re-counted each time it is shown.
+    LaunchedEffect(navigation.dest, otherSection, builds.loaded, builds.builds.map { it.id }) {
+        if (navigation.dest == Dest.Other && otherSection == null && builds.loaded) {
+            try { otherOverview = game.otherOverview() }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { game.reportError("other-overview", e) }
+        }
+    }
+    // Servers are re-read and pinged each time the section opens or the build changes.
+    LaunchedEffect(navigation.dest, otherSection, builds.loaded, servers.selectedBuildId) {
+        if (navigation.dest == Dest.Other && otherSection == OtherSection.Servers && builds.loaded) servers.refresh()
+    }
+    LaunchedEffect(navigation.dest, builds.loaded, mods.selectedBuildId, mods.search, mods.catalogReloadKey, mods.catalogActive) {
+        mods.searchCatalog()
+    }
+    LaunchedEffect(navigation.dest, mods.catalogActive, mods.projects.map { it.id to it.iconUrl }) { mods.loadIcons() }
+    LaunchedEffect(navigation.dest, mods.catalogActive, preferences.translateModDescriptions,
+        mods.projects.map { it.id to it.description }) { mods.translateDescriptions() }
+
+    LaunchedEffect(navigation.dest, builds.loaded) {
+        if (navigation.dest == Dest.Builds && builds.loaded) builds.pollRunning()
+    }
+    LaunchedEffect(logs.buildId) { logs.buildId?.let { logs.follow(it) } }
+    LaunchedEffect(navigation.settingsOpen, builds.selectedBuild?.id) {
+        if (navigation.settingsOpen || builds.selectedBuild != null) settings.loadJavaOptimizationInfo()
+    }
+    LaunchedEffect(preferences.showPlayer) { player.applyEnabled(preferences.showPlayer) }
+    LaunchedEffect(preferences.showPlayer) { if (preferences.showPlayer) player.poll() }
+    LaunchedEffect(player.currentTrack) { if (player.currentTrack == null) player.expanded = false }
+    LaunchedEffect(Unit) { builds.pollLaunchFailures() }
+    LaunchedEffect(messages.notice) { if (messages.notice != null) { delay(4000); messages.notice = null } }
+    LaunchedEffect(messages.undoModUpdate) { if (messages.undoModUpdate != null) { delay(8000); messages.undoModUpdate = null } }
+
+    val selectedInstalledMods = mods.selectedInstalledMods
     val securityReportsByProject = selectedInstalledMods.mapNotNull { mod ->
         mod.projectId.takeIf(String::isNotBlank)?.let { projectId ->
-            modSecurityReports["${selectedModsBuildId}:${mod.fileName}"]?.let { projectId to it }
+            mods.securityReports["${mods.selectedBuildId}:${mod.fileName}"]?.let { projectId to it }
         }
     }.toMap()
     val scanningSecurityProjects = selectedInstalledMods.filter {
-        "${selectedModsBuildId}:${it.fileName}" in scanningModFiles
+        "${mods.selectedBuildId}:${it.fileName}" in mods.scanningFiles
     }.mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet()
 
     AppFontProvider {
         Box(Modifier.fillMaxSize().background(C.window)) {
             Row(Modifier.fillMaxSize()) {
                 Sidebar(
-                    current = dest,
+                    current = navigation.dest,
                     onSelect = { next ->
-                        readingNews = false
-                        dest = next
-                        if (next == Dest.Builds) selectedBuild = null
+                        navigation.readingNews = false
+                        navigation.dest = next
+                        // "Остальное" in the sidebar always leads to its menu, also from inside a section.
+                        if (next == Dest.Other) { navigation.otherSection = null; screenshots.close() }
+                        if (next == Dest.Builds) builds.selectedBuild = null
                     },
-                    onOpenSettings = { settingsOpen = true },
-                    currentTrack = currentTrack.takeIf { preferences.showPlayer },
-                    trackError = trackError.takeIf { preferences.showPlayer },
-                    onTrackCommand = { command ->
-                        if (preferences.showPlayer && !trackCommandBusy) {
-                            trackCommandBusy = true
-                            val previousTrack = currentTrack
-                            if (command == TrackCommand.PLAY_PAUSE) {
-                                currentTrack = currentTrack?.let { it.copy(isPlaying = !it.isPlaying) }
-                            }
-                            scope.launch {
-                                try {
-                                    game.controlTrack(command)
-                                    delay(150)
-                                    val track = game.currentTrack()
-                                    if (preferences.showPlayer) currentTrack = track
-                                    trackError = null
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    if (preferences.showPlayer) {
-                                        currentTrack = previousTrack
-                                        trackError = e.message ?: "Не удалось управлять текущим треком."
-                                    }
-                                } finally {
-                                    trackCommandBusy = false
-                                }
-                            }
-                        }
-                    },
-                    playerExpanded = playerExpanded,
-                    onTogglePlayer = { playerExpanded = !playerExpanded },
-                    profileName = profiles?.active?.name ?: "Профиль",
-                    onOpenProfiles = { profilesOpen = true },
+                    onOpenSettings = { navigation.settingsOpen = true },
+                    currentTrack = player.currentTrack.takeIf { preferences.showPlayer },
+                    trackError = player.trackError.takeIf { preferences.showPlayer },
+                    onTrackCommand = { command -> player.command(command) },
+                    playerExpanded = player.expanded,
+                    onTogglePlayer = { player.expanded = !player.expanded },
+                    profileName = profiles.profiles?.active?.name ?: "Профиль",
+                    profileAvatar = profiles.profiles?.active?.avatar,
+                    onOpenProfiles = { profiles.open = true },
                 )
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    if (readingNews) {
-                        NewsReader(onBack = { readingNews = false }, beta = readingBeta)
+                    if (navigation.readingNews) {
+                        NewsReader(onBack = { navigation.readingNews = false }, beta = navigation.readingBeta)
                     } else {
                     AnimatedContent(
-                        targetState = Triple(dest, selectedBuild, logsBuildId),
+                        targetState = Triple(navigation.dest, builds.selectedBuild, logs.buildId),
                         modifier = Modifier.fillMaxSize(),
                         transitionSpec = {
                             (fadeIn(tween(180, easing = CactusMotion.easeOut)) +
@@ -759,208 +212,157 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                         }, label = "navigation",
                     ) { (route, buildDetail, logsId) ->
                         when (route) {
-                            Dest.Home -> HomeScreen(builds = builds, onOpenBuild = { dest = Dest.Builds })
-                             Dest.Builds -> if (buildDetail == null) BuildListScreen(
-                                  builds = builds,
-                                  loading = !buildsLoaded && buildsBusy,
-                                  error = buildsError,
-                                  runningBuildIds = runningBuildIds,
-                                  onRetry = { buildOperation({ game.builds() }) },
-                                 onCreate = { newBuildOpen = true },
-                                 onOpen = { logsBuildId = null; selectedBuild = it },
-                                  onPlay = { build -> playBuild(build) },
-                              ) else if (logsId == buildDetail.id) BuildLogsScreen(
-                                  build = buildDetail,
-                                  lines = logLines,
-                                  loading = logsLoading,
-                                  error = logsError,
-                                  diagnosis = crashDiagnosis,
-                                  diagnosisLoading = diagnosisLoading,
-                                  recoveryBusy = recoveryBusy,
-                                  recoveryMessage = recoveryMessage,
-                                  onBack = { logsBuildId = null },
-                                  onTryRecovery = { modFile ->
-                                      if (recoveryBusy || buildDetail.id in runningBuildIds) return@BuildLogsScreen
-                                      recoveryBusy = true
-                                      recoveryMessage = null
-                                      scope.launch {
-                                          try {
-                                              game.launchRecoveryBuild(
-                                                  buildDetail.id, modFile, preferences.memoryGb,
-                                                  externalApiRoot.takeIf { externalAccountName != null },
-                                                  preferences.automaticMemory, preferences.autoJavaOptimization,
-                                              )
-                                              recoveryMessage = "Пробный запуск идёт без этого мода. Сборка и миры не менялись."
-                                          } catch (e: CancellationException) { throw e }
-                                          catch (e: Exception) { recoveryMessage = e.message ?: "Пробный запуск не удался." }
-                                          finally { recoveryBusy = false }
-                                      }
-                                  },
-                                  onOpenFile = {
-                                      scope.launch {
-                                          try { game.openBuildLogs(buildDetail.id) }
-                                          catch (e: CancellationException) { throw e }
-                                          catch (e: Exception) { logsError = e.message ?: "Не удалось открыть файл логов." }
-                                      }
-                                  },
-                              ) else BuildManageScreen(
-                                  build = buildDetail,
-                                  busy = buildsBusy,
-                                  running = buildDetail.id in runningBuildIds,
-                                  memoryGb = preferences.memoryGb,
-                                  automaticMemory = preferences.automaticMemory,
-                                  javaPlan = selectedBuildJavaPlan,
-                                  javaPlanLoading = selectedBuildJavaPlanLoading,
-                                  javaOptimizationInfo = javaOptimizationInfo,
-                                   resourcePacks = resourcePacks,
-                                   resourcePacksLoading = resourcePacksLoading,
-                                   resourcePacksError = resourcePacksError,
-                                   onImportResourcePack = {
-                                       if (!buildsBusy) scope.launch {
-                                           buildsBusy = true
-                                           resourcePacksError = null
-                                           try {
-                                               if (game.importResourcePack(buildDetail.id)) resourcePacks = game.resourcePacks(buildDetail.id)
-                                           } catch (e: CancellationException) { throw e }
-                                           catch (e: Exception) { resourcePacksError = e.message ?: "Не удалось добавить ресурспак." }
-                                           finally { buildsBusy = false }
-                                       }
-                                   },
-                                   onToggleResourcePack = { pack, enabled ->
-                                       if (!buildsBusy) scope.launch {
-                                           buildsBusy = true
-                                           resourcePacksError = null
-                                           try {
-                                               game.setResourcePackEnabled(buildDetail.id, pack.fileName, enabled)
-                                               resourcePacks = game.resourcePacks(buildDetail.id)
-                                           } catch (e: CancellationException) { throw e }
-                                           catch (e: Exception) { resourcePacksError = e.message ?: "Не удалось изменить ресурспак." }
-                                           finally { buildsBusy = false }
-                                       }
-                                   },
-                                   onOpenResourcePacks = {
-                                       scope.launch {
-                                           try { game.openResourcePacksFolder(buildDetail.id) }
-                                           catch (e: CancellationException) { throw e }
-                                           catch (e: Exception) { resourcePacksError = e.message ?: "Не удалось открыть папку ресурспаков." }
-                                       }
-                                   },
-                                    onRefreshResourcePacks = {
-                                        scope.launch {
-                                            resourcePacksLoading = true
-                                            resourcePacksError = null
-                                            try { resourcePacks = game.resourcePacks(buildDetail.id) }
-                                            catch (e: CancellationException) { throw e }
-                                            catch (e: Exception) { resourcePacksError = e.message ?: "Не удалось обновить список ресурспаков." }
-                                            finally { resourcePacksLoading = false }
-                                        }
-                                    },
-                                  onMemoryChange = { preferences.memoryGb = it; preferences.automaticMemory = false },
-                                  onAutomaticMemoryChange = { preferences.automaticMemory = it },
-                                  onIcon = { icon -> buildOperation({ game.setBuildIcon(buildDetail.id, icon) }) },
-                                  error = buildsError,
-                                  onRename = { name -> buildOperation({ game.renameBuild(buildDetail.id, name) }) },
-                                  onDelete = { deleteFiles -> buildOperation({ game.deleteBuild(buildDetail.id, deleteFiles) }) },
-                                  onOpenFolder = {
-                                      scope.launch {
-                                          try { game.openBuildFolder(buildDetail.id) }
-                                          catch (e: CancellationException) { throw e }
-                                          catch (e: Exception) { buildsError = e.message ?: "Не удалось открыть папку." }
-                                      }
-                                  },
-                                 onBack = { selectedBuild = null },
-                                 onOpenLogs = { logsBuildId = buildDetail.id },
-                                 onOpenMods = { selectedModsBuildId = buildDetail.id; dest = Dest.Mods },
-                                 onPlay = {
-                                      playBuild(buildDetail)
+                            Dest.Home -> HomeScreen(builds = builds.builds, onOpenBuild = { navigation.dest = Dest.Builds })
+                            Dest.Builds -> if (buildDetail == null) BuildListScreen(
+                                builds = builds.builds,
+                                loading = !builds.loaded && builds.busy,
+                                error = builds.error,
+                                runningBuildIds = builds.runningBuildIds,
+                                onRetry = { builds.operation({ game.builds() }) },
+                                onCreate = { navigation.newBuildOpen = true },
+                                onOpen = { logs.buildId = null; builds.selectedBuild = it },
+                                onPlay = { build -> builds.play(build, onGhostMode) },
+                            ) else if (logsId == buildDetail.id) BuildLogsScreen(
+                                build = buildDetail,
+                                lines = logs.lines,
+                                loading = logs.loading,
+                                error = logs.error,
+                                diagnosis = logs.diagnosis,
+                                diagnosisLoading = logs.diagnosisLoading,
+                                recoveryBusy = logs.recoveryBusy,
+                                recoveryMessage = logs.recoveryMessage,
+                                onBack = { logs.buildId = null },
+                                onTryRecovery = { modFile ->
+                                    logs.tryRecovery(buildDetail.id, modFile, running = buildDetail.id in builds.runningBuildIds)
                                 },
-                                onNewBuild = { newBuildOpen = true },
+                                onOpenFile = { logs.openFile(buildDetail.id) },
+                            ) else {
+                            LaunchedEffect(buildDetail.id, buildDetail.playtime) { mods.loadLastUpdate(buildDetail.id) }
+                            BuildManageScreen(
+                                build = buildDetail,
+                                busy = builds.busy,
+                                running = buildDetail.id in builds.runningBuildIds,
+                                memoryGb = preferences.memoryGb,
+                                automaticMemory = preferences.automaticMemory,
+                                javaPlan = builds.javaPlan,
+                                javaPlanLoading = builds.javaPlanLoading,
+                                javaOptimizationInfo = settings.javaOptimizationInfo,
+                                resourcePacks = builds.resourcePacks,
+                                resourcePacksLoading = builds.resourcePacksLoading,
+                                resourcePacksError = builds.resourcePacksError,
+                                onImportResourcePack = { builds.importResourcePack(buildDetail.id) },
+                                onToggleResourcePack = { pack, enabled -> builds.setResourcePackEnabled(buildDetail.id, pack, enabled) },
+                                onOpenResourcePacks = { builds.openResourcePacksFolder(buildDetail.id) },
+                                onRefreshResourcePacks = { builds.refreshResourcePacks(buildDetail.id) },
+                                onMemoryChange = { preferences.memoryGb = it; preferences.automaticMemory = false },
+                                onAutomaticMemoryChange = { preferences.automaticMemory = it },
+                                onIcon = { icon -> builds.operation({ game.setBuildIcon(buildDetail.id, icon) }) },
+                                onAutoUpdateMods = { enabled -> builds.operation({ game.setAutoUpdateMods(buildDetail.id, enabled) }) },
+                                lastModUpdate = mods.lastUpdate.takeIf { mods.lastUpdateBuildId == buildDetail.id },
+                                rollingBackMods = mods.actionId == ModsState.ROLLBACK,
+                                onRollbackMods = { mods.rollback(buildDetail.id) },
+                                error = builds.error,
+                                onRename = { name -> builds.operation({ game.renameBuild(buildDetail.id, name) }) },
+                                onDelete = { deleteFiles -> builds.operation({ game.deleteBuild(buildDetail.id, deleteFiles) }) },
+                                onOpenFolder = { builds.openFolder(buildDetail.id) },
+                                onBack = { builds.selectedBuild = null },
+                                onOpenLogs = { logs.buildId = buildDetail.id },
+                                onOpenMods = { mods.selectedBuildId = buildDetail.id; navigation.dest = Dest.Mods },
+                                onPlay = { builds.play(buildDetail, onGhostMode) },
+                                onNewBuild = { navigation.newBuildOpen = true },
                             )
+                            }
                             Dest.Mods -> ModsCatalogScreen(
-                                builds = builds,
-                                selectedBuildId = selectedModsBuildId,
+                                builds = builds.builds,
+                                selectedBuildId = mods.selectedBuildId,
                                 installedMods = selectedInstalledMods,
-                                projects = modrinthProjects,
-                                query = modSearch,
-                                actionId = modActionId,
-                                loadingCatalog = modCatalogLoading,
-                                icons = modIcons,
-                                translatedDescriptions = translatedModDescriptions,
-                                failedTranslationIds = failedTranslationIds.toSet(),
+                                projects = mods.projects,
+                                query = mods.search,
+                                actionId = mods.actionId,
+                                loadingCatalog = mods.catalogLoading,
+                                icons = mods.icons,
+                                translatedDescriptions = mods.translatedDescriptions,
+                                failedTranslationIds = mods.failedTranslationIds.toSet(),
                                 showTranslatedDescriptions = preferences.translateModDescriptions,
-                                hasMore = modCatalogHasMore,
-                                loadingMore = modCatalogLoadingMore,
-                                loadMoreError = modCatalogMoreError,
-                                installedProjectIds = (if (installedModsBuildId == selectedModsBuildId) installedMods else emptyList())
-                                    .mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet(),
+                                hasMore = mods.catalogHasMore,
+                                loadingMore = mods.catalogLoadingMore,
+                                loadMoreError = mods.catalogMoreError,
+                                installedProjectIds = selectedInstalledMods.mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet(),
                                 securityEnabled = preferences.modAntivirusEnabled,
                                 securityReportsByProject = securityReportsByProject,
                                 scanningSecurityProjects = scanningSecurityProjects,
-                                queuedProjectIds = modInstallQueue.filter { it.first == selectedModsBuildId }.map { it.second.id },
-                                activeInstallProjectId = activeModInstall?.takeIf { it.first == selectedModsBuildId }?.second?.id,
-                                installErrors = modInstallErrors.filterKeys { it.startsWith("$selectedModsBuildId:") }
+                                queuedProjectIds = mods.installQueue.filter { it.first == mods.selectedBuildId }.map { it.second.id },
+                                activeInstallProjectId = mods.activeInstall?.takeIf { it.first == mods.selectedBuildId }?.second?.id,
+                                installErrors = mods.installErrors.filterKeys { it.startsWith("${mods.selectedBuildId}:") }
                                     .mapKeys { it.key.substringAfter(':') },
-                                installQueueCount = modInstallQueue.count { it.first == selectedModsBuildId } +
-                                    if (activeModInstall?.first == selectedModsBuildId) 1 else 0,
-                                onCatalogSelected = { modsCatalogActive = it },
-                                loadingBuilds = !buildsLoaded && buildsBusy,
-                                loadingMods = modsLoading,
-                                error = modsError,
-                                onSelectBuild = { selectedModsBuildId = it.id },
-                                onQueryChange = { modSearch = it },
-                                onLoadMore = { loadMoreModProjects() },
-                                onInstall = { project ->
-                                    val id = selectedModsBuildId
-                                    if (id != null) enqueueModInstall(id, project)
-                                },
-                                onRemove = { mod ->
-                                    val id = selectedModsBuildId
-                                    if (id != null && modActionId == null) scope.launch {
-                                        modActionId = mod.fileName
-                                        modsError = null
-                                        try {
-                                            game.removeMod(id, mod.fileName)
-                                            installedMods = game.installedMods(id)
-                                            installedModsBuildId = id
-                                            javaPlanRevisions[id] = (javaPlanRevisions[id] ?: 0) + 1
-                                        } catch (e: CancellationException) { throw e }
-                                        catch (e: Exception) { modsError = e.message ?: "Не удалось удалить мод." }
-                                        finally { modActionId = null }
-                                    }
-                                },
-                                onToggleMod = { mod, enabled ->
-                                    val id = selectedModsBuildId
-                                    if (id != null && modActionId == null) scope.launch {
-                                        modActionId = mod.fileName
-                                        modsError = null
-                                        try {
-                                            game.setModEnabled(id, mod.fileName, enabled)
-                                            installedMods = game.installedMods(id)
-                                            installedModsBuildId = id
-                                            javaPlanRevisions[id] = (javaPlanRevisions[id] ?: 0) + 1
-                                        } catch (e: CancellationException) { throw e }
-                                        catch (e: Exception) { modsError = e.message ?: "Не удалось изменить состояние мода." }
-                                        finally { modActionId = null }
-                                    }
-                                },
-                                onRefresh = {
-                                    modsReloadKey++
-                                    modCatalogReloadKey++
-                                    selectedModsBuildId?.let { id -> javaPlanRevisions[id] = (javaPlanRevisions[id] ?: 0) + 1 }
-                                },
-                                onOpenFolder = {
-                                    val id = selectedModsBuildId
-                                    if (id != null) scope.launch {
-                                        try { game.openModsFolder(id) }
-                                        catch (e: CancellationException) { throw e }
-                                        catch (e: Exception) { modsError = e.message ?: "Не удалось открыть папку модов." }
-                                    }
-                                },
-                                onOpenBuilds = { dest = Dest.Builds },
+                                installQueueCount = mods.installQueue.count { it.first == mods.selectedBuildId } +
+                                    if (mods.activeInstall?.first == mods.selectedBuildId) 1 else 0,
+                                onCatalogSelected = { mods.catalogActive = it },
+                                loadingBuilds = !builds.loaded && builds.busy,
+                                loadingMods = mods.loading,
+                                error = mods.error,
+                                onSelectBuild = { mods.selectedBuildId = it.id },
+                                onQueryChange = { mods.search = it },
+                                onLoadMore = { mods.loadMore() },
+                                onInstall = { project -> mods.selectedBuildId?.let { mods.enqueueInstall(it, project) } },
+                                onRemove = { mod -> mods.remove(mod) },
+                                onToggleMod = { mod, enabled -> mods.setEnabled(mod, enabled) },
+                                onRefresh = { mods.refresh() },
+                                updates = mods.selectedUpdates,
+                                checkingUpdates = mods.checkingUpdates,
+                                onCheckUpdates = { mods.refreshAndCheck() },
+                                onUpdate = { mod -> mods.update(mod) },
+                                onUpdateAll = { mods.update(null) },
+                                problems = mods.selectedProblems,
+                                missingProjects = mods.selectedMissingProjects,
+                                onInstallMissing = { problem -> mods.installMissing(problem) },
+                                onOpenFolder = { mods.openFolder() },
+                                onOpenBuilds = { navigation.dest = Dest.Builds },
+                            )
+                            Dest.Other -> OtherScreen(
+                                builds = builds.builds,
+                                loadingBuilds = !builds.loaded && builds.busy,
+                                section = otherSection,
+                                onOpenSection = { screenshots.close(); navigation.otherSection = it },
+                                overview = otherOverview,
+                                shotThumbnail = { buildId, shot -> game.screenshotThumbnail(buildId, shot) },
+                                overlayOpen = otherSection == OtherSection.Screenshots && screenshots.viewingShot != null,
+                                screenshots = ScreenshotsSectionState(
+                                    selectedBuildId = screenshots.selectedBuildId,
+                                    shots = screenshots.selectedShots,
+                                    loading = screenshots.loading,
+                                    error = screenshots.error,
+                                    thumbnail = { shot -> screenshots.selectedBuildId?.let { game.screenshotThumbnail(it, shot) } },
+                                    // Both sections follow one build choice.
+                                    onSelectBuild = { build -> screenshots.selectedBuildId = build.id; servers.select(build.id) },
+                                    onOpen = { shot -> screenshots.open(shot) },
+                                    onOpenFolder = { screenshots.openFolder() },
+                                ),
+                                servers = ServersSectionState(
+                                    selectedBuildId = servers.selectedBuildId,
+                                    servers = servers.visibleServers,
+                                    pings = servers.pings,
+                                    loading = servers.loading,
+                                    refreshing = servers.refreshing,
+                                    error = servers.error,
+                                    form = servers.form,
+                                    busy = servers.busy,
+                                    playBlocked = builds.busy || servers.selectedBuildId in builds.runningBuildIds,
+                                    onSelectBuild = { build -> servers.select(build.id); screenshots.selectedBuildId = build.id },
+                                    onRefresh = { servers.refresh() },
+                                    onAdd = { servers.startAdd() },
+                                    onEdit = { servers.startEdit(it) },
+                                    onFormChange = { name, address -> servers.updateForm(name, address) },
+                                    onFormSave = { servers.saveForm() },
+                                    onFormCancel = { servers.cancelForm() },
+                                    onRemove = { servers.remove(it) },
+                                    onPlay = { servers.play(it, onGhostMode) },
+                                ),
+                                onOpenBuilds = { navigation.dest = Dest.Builds },
                             )
                             Dest.News -> NewsScreen(
-                                onOpenArticle = { readingBeta = false; readingNews = true },
-                                onOpenBeta = { readingBeta = true; readingNews = true },
+                                onOpenArticle = { navigation.readingBeta = false; navigation.readingNews = true },
+                                onOpenBeta = { navigation.readingBeta = true; navigation.readingNews = true },
                             )
                         }
                     }
@@ -968,128 +370,134 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                 }
             }
 
-            MotionOverlay(newBuildOpen) {
+            MotionOverlay(navigation.newBuildOpen) {
                 NewBuildDialog(
                     game = game,
-                    busy = buildsBusy,
-                    saveError = buildsError,
-                    onDismiss = { newBuildOpen = false },
+                    busy = builds.busy,
+                    saveError = builds.error,
+                    onDismiss = { navigation.newBuildOpen = false },
                     onCreate = { name, version, loader ->
-                        buildOperation({ game.createBuild(name, version, loader) }, {
-                            newBuildOpen = false
-                            selectedBuild = null
-                            dest = Dest.Builds
-                            builds.lastOrNull()?.let { startInstall(it) }
+                        builds.operation({ game.createBuild(name, version, loader) }, {
+                            navigation.newBuildOpen = false
+                            builds.selectedBuild = null
+                            navigation.dest = Dest.Builds
+                            builds.builds.lastOrNull()?.let { builds.startInstall(it) }
                         })
                     },
                 )
             }
-            MotionOverlay(settingsOpen) {
+            MotionOverlay(navigation.settingsOpen) {
                 SettingsDialog(
                     preferences,
-                    javaOptimizationInfo = javaOptimizationInfo,
-                    updateStatus = launcherUpdateStatus,
-                    update = launcherUpdate,
-                    updateDownloaded = launcherUpdateFile != null,
-                    updateBusy = launcherUpdateBusy,
-                    onCheckUpdates = { scope.launch { checkLauncherUpdates(download = false) } },
-                    onDownloadUpdate = { scope.launch { checkLauncherUpdates(download = true) } },
-                    onOpenUpdate = { launcherUpdateFile?.let { path -> scope.launch {
-                        try { game.openLauncherUpdate(path) }
-                        catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { launcherUpdateStatus = e.message ?: "Не удалось открыть установщик." }
-                    } } },
-                    onDismiss = { settingsOpen = false },
-                    onReset = {
-                        preferences.reset(game.gameDir())
-                        settingsLoadFailed = false
-                        preferencesError = null
-                    },
+                    javaOptimizationInfo = settings.javaOptimizationInfo,
+                    updateStatus = updates.status,
+                    update = updates.update,
+                    updateDownloaded = updates.downloadedFile != null,
+                    updateBusy = updates.busy,
+                    onCheckUpdates = { scope.launch { updates.check(download = false) } },
+                    onDownloadUpdate = { scope.launch { updates.check(download = true) } },
+                    onOpenUpdate = { scope.launch { updates.openDownloaded() } },
+                    onDismiss = { navigation.settingsOpen = false },
+                    onReset = { settings.reset() },
                     onRestartSetup = {
-                        settingsOpen = false
-                        firstSetupOpen = true
+                        navigation.settingsOpen = false
+                        settings.firstSetupOpen = true
                     },
-                    error = preferencesError,
+                    error = settings.preferencesError,
                 )
             }
-            MotionOverlay(firstSetupOpen) {
+            MotionOverlay(settings.firstSetupOpen) {
                 InitialSetupDialog(
                     preferences,
-                    javaOptimizationInfo,
-                    preferencesError,
-                    initialNickname = profiles?.active?.name ?: "Nick",
+                    settings.javaOptimizationInfo,
+                    settings.preferencesError,
+                    initialNickname = profiles.profiles?.active?.name ?: "Nick",
                     onChooseFolder = { current -> game.chooseDirectory(current) },
                     onComplete = { nickname ->
-                        if (nickname != null) {
-                            val snapshot = game.profiles()
-                            val active = snapshot.active
-                            profiles = when {
-                                active == null -> game.addProfile(nickname)
-                                active.name != nickname -> game.renameProfile(active.id, nickname)
-                                else -> snapshot
-                            }
-                        }
-                        firstSetupOpen = false
+                        if (nickname != null) profiles.applySetupNickname(nickname)
+                        settings.firstSetupOpen = false
                     },
                 )
             }
-            MotionOverlay(profilesOpen) { ProfilesDialog(
-                snapshot = profiles, busy = profilesBusy, error = profilesError,
-                onDismiss = { profilesOpen = false },
-                onRetry = { profileOperation { game.profiles() } },
-                onAdd = { name -> profileOperation { game.addProfile(name) } },
-                onRename = { id, name -> profileOperation { game.renameProfile(id, name) } },
-                onSelect = { id -> profileOperation { game.selectProfile(id) } },
-                onDelete = { id -> profileOperation { game.deleteProfile(id) } },
-                externalAccountName = externalAccountName,
+            MotionOverlay(profiles.open) { ProfilesDialog(
+                snapshot = profiles.profiles, busy = profiles.busy, error = profiles.error,
+                onDismiss = { profiles.open = false },
+                onRetry = { profiles.operation { game.profiles() } },
+                onAdd = { name -> profiles.operation { game.addProfile(name) } },
+                onRename = { id, name -> profiles.operation { game.renameProfile(id, name) } },
+                onSelect = { id -> profiles.operation { game.selectProfile(id) } },
+                onDelete = { id -> profiles.operation { game.deleteProfile(id) } },
+                onChooseAvatar = { id -> profiles.chooseAvatar(id) },
+                onRemoveAvatar = { id -> profiles.removeAvatar(id) },
+                externalAccountName = profiles.externalAccountName,
                 advancedMode = preferences.advancedMode,
-                onSignInExternal = { apiRoot, username, password ->
-                    if (!profilesBusy) {
-                        profilesBusy = true
-                        profilesError = null
-                        scope.launch {
-                            try {
-                                externalAccountName = game.signInExternal(apiRoot, username, password)
-                                externalApiRoot = apiRoot.trim().trimEnd('/')
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                profilesError = e.message ?: "Не удалось войти на сервер авторизации."
-                            } finally {
-                                profilesBusy = false
-                            }
-                        }
-                    }
-                },
-                onSignOutExternal = {
-                    game.signOutExternal()
-                    externalAccountName = null
-                    externalApiRoot = ""
-                },
+                onSignInExternal = { apiRoot, username, password -> profiles.signIn(apiRoot, username, password) },
+                onSignOutExternal = { profiles.signOut() },
             ) }
-            MotionOverlay(modHelperOpen) {
-                modHelperIssue?.let { issue ->
+            MotionOverlay(mods.helperOpen) {
+                mods.helperIssue?.let { issue ->
                     ModHelperDialog(
                         issue = issue,
-                        onDismiss = { modHelperOpen = false },
+                        onDismiss = { mods.helperOpen = false },
                         onOpenBuilds = {
-                            modHelperOpen = false
-                            selectedBuild = null
-                            dest = Dest.Builds
+                            mods.helperOpen = false
+                            builds.selectedBuild = null
+                            navigation.dest = Dest.Builds
                         },
                     )
                 }
             }
-            MotionOverlay(installBuild != null) {
-                installBuild?.let { build ->
-                    com.cactuslauncher.ui.InstallDialog(build.name, installProgress, installBusy, installPaused, installError,
-                        onPause = { installPaused = !installPaused; game.pauseInstallation(installPaused) },
-                        onCancel = { installJob?.cancel() },
-                        onRetry = { startInstall(build) },
-                        onClose = { installBuild = null }, build = build)
+            MotionOverlay(builds.installBuild != null) {
+                builds.installBuild?.let { build ->
+                    com.cactuslauncher.ui.InstallDialog(build.name, builds.installProgress, builds.installBusy, builds.installPaused, builds.installError,
+                        onPause = { builds.togglePause() },
+                        onCancel = { builds.cancelInstall() },
+                        onRetry = { builds.startInstall(build) },
+                        onClose = { builds.installBuild = null }, build = build)
                 }
             }
-            launchFailure?.let { (buildId, message) ->
+            MotionOverlay(navigation.dest == Dest.Other && otherSection == OtherSection.Screenshots && screenshots.viewingShot != null) {
+                screenshots.viewingShot?.let { shot ->
+                    val buildId = screenshots.selectedBuildId
+                    ScreenshotViewer(
+                        shot = shot,
+                        position = screenshots.viewingIndex + 1,
+                        count = screenshots.selectedShots.size,
+                        busy = screenshots.busy,
+                        image = { current -> buildId?.let { game.screenshotImage(it, current, 2560) } },
+                        onMove = { screenshots.move(it) },
+                        onClose = { screenshots.close() },
+                        onOpenInSystem = { screenshots.openInSystem(shot) },
+                        onReveal = { screenshots.reveal(shot) },
+                        onCopy = { screenshots.copy(shot) },
+                        onDelete = { screenshots.delete(shot) },
+                    )
+                }
+            }
+            messages.launchWarning?.let { warning ->
+                Column(
+                    Modifier.align(Alignment.BottomCenter).padding(24.dp).widthIn(max = 560.dp)
+                        .clip(RoundedCornerShape(12.dp)).background(C.toast).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    T(warning.message, 14, C.onToast, lineHeight = 20)
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        warning.install?.let { project ->
+                            T("Установить ${project.title}", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                                messages.launchWarning = null
+                                mods.enqueueInstall(warning.buildId, project)
+                                messages.notice = "${project.title} добавлен в очередь установки."
+                            })
+                        }
+                        T("Всё равно запустить", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                            messages.launchWarning = null
+                            builds.builds.find { it.id == warning.buildId }?.let { builds.play(it, onGhostMode, checkMods = false, server = warning.server) }
+                        })
+                        T("Отмена", 14, C.onToast, lineHeight = 18, modifier = Modifier.clickNoRipple { messages.launchWarning = null })
+                    }
+                }
+            }
+            messages.launchFailure?.let { (buildId, message) ->
                 Column(
                     Modifier.align(Alignment.BottomCenter).padding(24.dp).widthIn(max = 560.dp)
                         .clip(RoundedCornerShape(12.dp)).background(C.toast).padding(16.dp),
@@ -1097,24 +505,43 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                 ) {
                     T(message, 14, C.onToast, lineHeight = 20)
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        builds.find { it.id == buildId }?.let { build ->
+                        if (messages.launchFailureRollback) T("Откатить обновление модов", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                            messages.launchFailure = null
+                            messages.launchFailureRollback = false
+                            mods.rollback(buildId)
+                        })
+                        builds.builds.find { it.id == buildId }?.let { build ->
                             T("Открыть логи и диагностику", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
-                                launchFailure = null
-                                readingNews = false
-                                dest = Dest.Builds
-                                selectedBuild = build
-                                logsBuildId = build.id
+                                messages.launchFailure = null
+                                navigation.readingNews = false
+                                navigation.dest = Dest.Builds
+                                builds.selectedBuild = build
+                                logs.buildId = build.id
                             })
                         }
-                        T("Закрыть", 14, C.onToast, lineHeight = 18, modifier = Modifier.clickNoRipple { launchFailure = null })
+                        T("Закрыть", 14, C.onToast, lineHeight = 18, modifier = Modifier.clickNoRipple { messages.launchFailure = null })
                     }
                 }
             }
-            notice?.let { message ->
+            if (messages.notice == null) messages.undoModUpdate?.let { (buildId, message) ->
+                Row(
+                    Modifier.align(Alignment.BottomCenter).padding(24.dp).widthIn(max = 560.dp)
+                        .clip(RoundedCornerShape(12.dp)).background(C.toast).padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    T(message, 14, C.onToast, lineHeight = 20)
+                    T("Отменить", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                        messages.undoModUpdate = null
+                        mods.rollback(buildId)
+                    })
+                }
+            }
+            messages.notice?.let { message ->
                 Column(
                     Modifier.align(Alignment.BottomCenter).padding(24.dp)
                         .clip(RoundedCornerShape(12.dp)).background(C.toast)
-                        .clickNoRipple { notice = null }.padding(16.dp),
+                        .clickNoRipple { messages.notice = null }.padding(16.dp),
                 ) { T(message, 14, C.onToast, lineHeight = 20) }
             }
         }

@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 public final class ModrinthClient {
     public record Project(String id, String title, String description, String author, long downloads, String iconUrl) {}
     public record InstalledMod(String fileName, String title, String projectId, String version, boolean enabled) {}
-    private record FileInfo(String fileName, String url, String algorithm, String hash, long size) {}
+    record FileInfo(String fileName, String url, String algorithm, String hash, long size) {}
     private record Resolved(String projectId, String title, String version, FileInfo file) {}
 
     private static final String API = "https://api.modrinth.com/v2";
@@ -55,6 +55,36 @@ public final class ModrinthClient {
             ));
         }
         return List.copyOf(result);
+    }
+
+    private static final Pattern SLUG = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_-]{1,63}");
+
+    /**
+     * The Modrinth project with slug or id [slug] when it has a version for the build's Minecraft version and
+     * loader; null when there is no such project or version. Mod ids that use "_" are also tried with "-".
+     */
+    public Project findCompatible(String slug, String minecraftVersion, String loader) throws IOException {
+        if (slug == null || !SLUG.matcher(slug).matches()) return null;
+        String loaderId = loaderId(loader);
+        var candidates = new LinkedHashSet<String>();
+        candidates.add(slug.toLowerCase(Locale.ROOT));
+        candidates.add(slug.toLowerCase(Locale.ROOT).replace('_', '-'));
+        for (String candidate : candidates) {
+            JsonObject project;
+            try { project = getJson(API + "/project/" + encodePath(candidate), API); }
+            catch (FileNotFoundException e) { continue; }
+            catch (IOException e) {
+                if (String.valueOf(e.getMessage()).contains("404")) continue;
+                throw e;
+            }
+            if (!"mod".equals(safeString(project, "project_type", "mod"))) continue;
+            String id = requiredString(project, "id");
+            JsonArray versions = getProjectVersions(id, minecraftVersion, loaderId);
+            if (chooseVersion(versions) == null) return null;
+            return new Project(id, safeString(project, "title", candidate), safeString(project, "description", ""), "",
+                    project.has("downloads") ? project.get("downloads").getAsLong() : 0, safeString(project, "icon_url", ""));
+        }
+        return null;
     }
 
     public byte[] icon(String url) throws IOException {
@@ -307,7 +337,7 @@ public final class ModrinthClient {
         return getJsonElement(url, API).getAsJsonArray();
     }
 
-    private JsonObject chooseVersion(JsonArray versions) {
+    static JsonObject chooseVersion(JsonArray versions) {
         if (versions == null || versions.isEmpty()) return null;
         for (var value : versions) {
             JsonObject version = value.getAsJsonObject();
@@ -325,7 +355,7 @@ public final class ModrinthClient {
             throw new IOException("Версия мода несовместима с Minecraft или загрузчиком этой сборки.");
     }
 
-    private FileInfo primaryFile(JsonObject version) throws IOException {
+    static FileInfo primaryFile(JsonObject version) throws IOException {
         JsonArray files = version.getAsJsonArray("files");
         if (files == null || files.isEmpty()) throw new IOException("У версии Modrinth отсутствует файл для установки.");
         JsonObject selected = files.get(0).getAsJsonObject();
@@ -346,7 +376,7 @@ public final class ModrinthClient {
         return new FileInfo(fileName, url, algorithm, hash, size);
     }
 
-    private void downloadVerified(FileInfo file, Path target) throws IOException {
+    void downloadVerified(FileInfo file, Path target) throws IOException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(file.url())).timeout(Duration.ofMinutes(3))
                 .header("User-Agent", "CactusLauncher/2.0").GET().build();
         HttpResponse<InputStream> response;
@@ -379,6 +409,25 @@ public final class ModrinthClient {
         return getJsonElement(url, allowedBase).getAsJsonObject();
     }
 
+    /** GET under the Modrinth API, e.g. {@code "/version/abc"}. */
+    JsonElement apiGet(String path) throws IOException { return getJsonElement(API + path, API); }
+
+    /** POST of a JSON body under the Modrinth API (used by the hash-based update endpoints). */
+    JsonElement apiPost(String path, JsonObject body) throws IOException {
+        URI uri = URI.create(API + path);
+        HttpRequest request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
+                .header("User-Agent", "CactusLauncher/2.0").header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8)).build();
+        try {
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() != 200) throw new IOException("Modrinth вернул ошибку (HTTP " + response.statusCode() + ").");
+            if (!uri.getHost().equals(response.uri().getHost())) throw new IOException("Запрос направлен на неизвестный сервер.");
+            return JsonParser.parseString(response.body());
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new InterruptedIOException("Запрос к Modrinth отменён."); }
+        catch (JsonParseException e) { throw new IOException("Modrinth вернул некорректные данные.", e); }
+    }
+
     private JsonElement getJsonElement(String url, String allowedBase) throws IOException {
         URI uri = URI.create(url);
         if (!"https".equals(uri.getScheme()) || !uri.getHost().equals(URI.create(allowedBase).getHost()))
@@ -393,7 +442,7 @@ public final class ModrinthClient {
         catch (JsonParseException e) { throw new IOException("Modrinth вернул некорректные данные.", e); }
     }
 
-    private static void requireSafeModsDirectory(Path directory, boolean create) throws IOException {
+    static void requireSafeModsDirectory(Path directory, boolean create) throws IOException {
         Path mods = directory.toAbsolutePath().normalize();
         if (Files.isSymbolicLink(mods)) throw new IOException("Папка модов не должна быть символической ссылкой.");
         if (create) Files.createDirectories(mods);
@@ -401,7 +450,7 @@ public final class ModrinthClient {
         if (parent != null && Files.isSymbolicLink(parent)) throw new IOException("Путь к папке модов содержит символическую ссылку.");
     }
 
-    private static Properties readIndex(Path dir) throws IOException {
+    static Properties readIndex(Path dir) throws IOException {
         Properties properties = new Properties();
         Path index = dir.resolve("modrinth-index.properties");
         if (Files.isSymbolicLink(index)) throw new IOException("Индекс Modrinth не должен быть символической ссылкой.");
@@ -409,7 +458,7 @@ public final class ModrinthClient {
         return properties;
     }
 
-    private static void writeIndex(Path dir, Properties properties, Path stage) throws IOException {
+    static void writeIndex(Path dir, Properties properties, Path stage) throws IOException {
         Path temp = stage.resolve("index-" + UUID.randomUUID() + ".tmp");
         try (var output = Files.newOutputStream(temp, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
             properties.store(output, "Cactus Launcher Modrinth mods");
@@ -445,12 +494,12 @@ public final class ModrinthClient {
         catch (NoSuchAlgorithmException e) { throw new IOException("Алгоритм проверки файла не поддерживается.", e); }
     }
 
-    private static void move(Path from, Path to) throws IOException {
+    static void move(Path from, Path to) throws IOException {
         try { Files.move(from, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
         catch (AtomicMoveNotSupportedException e) { Files.move(from, to, StandardCopyOption.REPLACE_EXISTING); }
     }
 
-    private static void deleteTree(Path path) throws IOException {
+    static void deleteTree(Path path) throws IOException {
         if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
         try (var paths = Files.walk(path)) {
             for (Path entry : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(entry);
@@ -464,13 +513,13 @@ public final class ModrinthClient {
         } catch (IllegalArgumentException e) { return false; }
     }
 
-    private static boolean safeFileName(String fileName) {
+    static boolean safeFileName(String fileName) {
         if (fileName == null || !FILE_NAME.matcher(fileName).matches()) return false;
         try { return Path.of(fileName).getFileName().toString().equals(fileName); }
         catch (InvalidPathException e) { return false; }
     }
 
-    private static String loaderId(String loader) throws IOException {
+    static String loaderId(String loader) throws IOException {
         if (loader == null) throw new IOException("У выбранной сборки не указан загрузчик модов.");
         return switch (loader.toLowerCase(Locale.ROOT)) {
             case "fabric" -> "fabric";
@@ -483,15 +532,15 @@ public final class ModrinthClient {
 
     private static JsonArray facet(String value) { JsonArray facet = new JsonArray(); facet.add(value); return facet; }
     private static String encodePath(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
-    private static String requiredString(JsonObject object, String key) throws IOException {
+    static String requiredString(JsonObject object, String key) throws IOException {
         if (!object.has(key) || object.get(key).isJsonNull()) throw new IOException("Modrinth не вернул поле " + key + ".");
         return object.get(key).getAsString();
     }
-    private static String safeString(JsonObject object, String key, String fallback) {
+    static String safeString(JsonObject object, String key, String fallback) {
         try { return object.has(key) && !object.get(key).isJsonNull() ? object.get(key).getAsString() : fallback; }
         catch (RuntimeException ignored) { return fallback; }
     }
-    private static boolean contains(JsonArray values, String expected) {
+    static boolean contains(JsonArray values, String expected) {
         for (var value : values) if (expected.equals(value.getAsString())) return true;
         return false;
     }

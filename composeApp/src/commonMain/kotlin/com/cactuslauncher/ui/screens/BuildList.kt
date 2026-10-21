@@ -71,7 +71,7 @@ fun BuildListScreen(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     T(build.name, 18, C.text1, FontWeight.Medium, lineHeight = 22)
                     T("Minecraft ${build.version}, ${build.loader}", 14, C.text2, lineHeight = 20)
-                    T(build.lastPlayed, 12, C.text2, lineHeight = 15)
+                    T(build.playSummary, 12, C.text2, lineHeight = 15)
                 }
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val running = build.id in runningBuildIds

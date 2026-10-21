@@ -1,6 +1,7 @@
 package com.cactuslauncher.model
 
-data class PlayerProfile(val id: String, val name: String)
+/** [avatar]: the profile picture, or null to show the default artwork. */
+data class PlayerProfile(val id: String, val name: String, val avatar: androidx.compose.ui.graphics.ImageBitmap? = null)
 data class ProfileSnapshot(val profiles: List<PlayerProfile>, val activeId: String) {
     val active: PlayerProfile? get() = profiles.find { it.id == activeId }
 }

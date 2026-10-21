@@ -36,10 +36,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collect
+import com.cactuslauncher.model.ModProblem
 import com.cactuslauncher.model.LauncherBuild
 import com.cactuslauncher.model.InstalledMod
 import com.cactuslauncher.model.ModrinthProject
 import com.cactuslauncher.model.ModSecurityReport
+import com.cactuslauncher.model.ModUpdate
 import com.cactuslauncher.theme.C
 import com.cactuslauncher.ui.AnimatedSegments
 import com.cactuslauncher.ui.InstanceArtwork
@@ -86,12 +88,21 @@ fun ModsCatalogScreen(
     onRefresh: () -> Unit,
     onOpenFolder: () -> Unit,
     onOpenBuilds: () -> Unit,
+    updates: Map<String, ModUpdate> = emptyMap(),
+    checkingUpdates: Boolean = false,
+    onCheckUpdates: () -> Unit = {},
+    onUpdate: (InstalledMod) -> Unit = {},
+    onUpdateAll: () -> Unit = {},
+    problems: List<ModProblem> = emptyList(),
+    missingProjects: Map<String, ModrinthProject> = emptyMap(),
+    onInstallMissing: (ModProblem) -> Unit = {},
 ) {
     var segment by remember { mutableIntStateOf(0) }
     SideEffect { onCatalogSelected(segment == 1) }
     val selectedBuild = builds.firstOrNull { it.id == selectedBuildId }
     val visibleMods = installedMods.filter { it.title.contains(query.trim(), true) || it.fileName.contains(query.trim(), true) }
     val visibleProjects = projects
+    val problemsByFile = remember(problems) { problems.groupBy { it.fileName } }
     val catalogListState = rememberLazyListState()
     LaunchedEffect(query, selectedBuildId, segment) {
         catalogListState.scrollToItem(0)
@@ -138,13 +149,13 @@ fun ModsCatalogScreen(
                 item(key = "queue") { T("Очередь загрузки: ${modsCount(installQueueCount)}", 13, C.text2, lineHeight = 16) }
             }
             when {
-                loadingBuilds -> item(key = "state") { EmptyModsState("Загружаем сборки…", "Список модов появится после загрузки сборок.") }
-                builds.isEmpty() -> item(key = "state") { EmptyModsState("Сборок пока нет", "Создайте сборку, чтобы её моды хранились отдельно.", "Перейти к сборкам", onOpenBuilds) }
-                selectedBuild == null -> item(key = "state") { EmptyModsState("Выберите сборку", "Моды будут показаны только для выбранной сборки.") }
-                segment == 1 && selectedBuild.loader.equals("Vanilla", ignoreCase = true) -> item(key = "state") { EmptyModsState("Нужен загрузчик модов", "Это сборка Vanilla. Для модов создайте сборку с Fabric или Forge.") }
-                segment == 1 && error != null -> item(key = "state") { EmptyModsState(error, "Проверьте подключение к Modrinth и повторите поиск.", "Повторить", onRefresh) }
-                segment == 1 && loadingCatalog -> item(key = "state") { EmptyModsState("Загружаем Modrinth…", "Ищем моды для Minecraft ${selectedBuild.version}, ${selectedBuild.loader}.") }
-                segment == 1 && visibleProjects.isEmpty() -> item(key = "state") { EmptyModsState("Ничего не найдено", "Измените поисковый запрос или проверьте каталог позже.") }
+                loadingBuilds -> item(key = "state") { EmptyState("Загружаем сборки…", "Список модов появится после загрузки сборок.") }
+                builds.isEmpty() -> item(key = "state") { EmptyState("Сборок пока нет", "Создайте сборку, чтобы её моды хранились отдельно.", "Перейти к сборкам", onOpenBuilds) }
+                selectedBuild == null -> item(key = "state") { EmptyState("Выберите сборку", "Моды будут показаны только для выбранной сборки.") }
+                segment == 1 && selectedBuild.loader.equals("Vanilla", ignoreCase = true) -> item(key = "state") { EmptyState("Нужен загрузчик модов", "Это сборка Vanilla. Для модов создайте сборку с Fabric или Forge.") }
+                segment == 1 && error != null -> item(key = "state") { EmptyState(error, "Проверьте подключение к Modrinth и повторите поиск.", "Повторить", onRefresh) }
+                segment == 1 && loadingCatalog -> item(key = "state") { EmptyState("Загружаем Modrinth…", "Ищем моды для Minecraft ${selectedBuild.version}, ${selectedBuild.loader}.") }
+                segment == 1 && visibleProjects.isEmpty() -> item(key = "state") { EmptyState("Ничего не найдено", "Измените поисковый запрос или проверьте каталог позже.") }
                 segment == 1 -> {
                     item(key = "catalog-header") {
                         T("${if (query.isBlank()) "Популярное" else "Результаты поиска"}: ${modsCount(visibleProjects.size)} для Minecraft ${selectedBuild.version} (${selectedBuild.loader})", 13, C.text2, lineHeight = 16)
@@ -173,10 +184,10 @@ fun ModsCatalogScreen(
                         }
                     }
                 }
-                loadingMods -> item(key = "state") { EmptyModsState("Читаем папку модов", "Загружаем список .jar для сборки «${selectedBuild.name}»…") }
-                error != null -> item(key = "state") { EmptyModsState(error, "Проверьте папку модов или повторите чтение.", "Повторить", onRefresh) }
+                loadingMods -> item(key = "state") { EmptyState("Читаем папку модов", "Загружаем список .jar для сборки «${selectedBuild.name}»…") }
+                error != null -> item(key = "state") { EmptyState(error, "Проверьте папку модов или повторите чтение.", "Повторить", onRefresh) }
                 visibleMods.isEmpty() -> item(key = "state") {
-                    EmptyModsState(
+                    EmptyState(
                         if (query.isBlank()) "В этой сборке пока нет модов" else "Моды не найдены",
                         if (query.isBlank()) "В папке «${selectedBuild.name}/mods» пока нет файлов .jar." else "Измените запрос или очистите поиск.",
                         if (query.isBlank()) "Открыть папку модов" else "Очистить поиск",
@@ -185,16 +196,28 @@ fun ModsCatalogScreen(
                 }
                 else -> {
                     item(key = "installed-header") {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            T("${modsCount(visibleMods.size)} в сборке ${selectedBuild.name}", 13, C.text2, lineHeight = 16, modifier = Modifier.weight(1f))
-                            T("Обновить", 13, C.accent, FontWeight.Medium, lineHeight = 16, modifier = Modifier.clickNoRipple(onRefresh))
-                        }
+                        InstalledHeader("${modsCount(visibleMods.size)} в сборке ${selectedBuild.name}", selectedBuild.id, updates, checkingUpdates, actionId, onCheckUpdates, onUpdateAll, problems)
                     }
                     items(visibleMods, key = { it.fileName }) { mod ->
                         InstalledModRow(
                             mod, actionId == mod.fileName, actionId != null,
                             onRemove = { onRemove(mod) },
                             onToggle = { onToggleMod(mod, it) },
+                            update = updates[mod.fileName],
+                            updating = actionId == "update:${mod.fileName}" || actionId == "update:all" && mod.fileName in updates,
+                            onUpdate = { onUpdate(mod) },
+                            problems = problemsByFile[mod.fileName].orEmpty(),
+                            installLabel = { problem ->
+                                problem.installId?.let { missingProjects[it] }?.let { project ->
+                                    when {
+                                        project.id == activeInstallProjectId -> "Устанавливаем…"
+                                        project.id in queuedProjectIds -> "В очереди"
+                                        project.id in installedProjectIds -> null
+                                        else -> "Установить"
+                                    }
+                                }
+                            },
+                            onInstallMissing = onInstallMissing,
                         )
                     }
                 }
@@ -204,7 +227,7 @@ fun ModsCatalogScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             T(selectedBuild?.let { "Папка: ${it.name}/mods" } ?: "Сначала выберите сборку", 13, C.text2, lineHeight = 17)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                T("Обновить", 14, if (selectedBuild == null) C.text2 else C.accent, FontWeight.Medium, lineHeight = 17,
+                T("Перезагрузить", 14, if (selectedBuild == null) C.text2 else C.accent, FontWeight.Medium, lineHeight = 17,
                     modifier = if (selectedBuild == null) Modifier else Modifier.clickNoRipple(onRefresh))
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(if (selectedBuild == null) C.fill else C.accentFill)
@@ -219,7 +242,7 @@ fun ModsCatalogScreen(
 }
 
 @Composable
-private fun BuildPicker(
+internal fun BuildPicker(
     builds: List<LauncherBuild>,
     selected: LauncherBuild?,
     loading: Boolean,
@@ -279,6 +302,17 @@ private fun BuildPicker(
     }
 }
 
+/** "1 проблема", "3 проблемы", "5 проблем". */
+private fun problemsCount(count: Int): String {
+    val word = when {
+        count % 100 in 11..14 -> "проблем"
+        count % 10 == 1 -> "проблема"
+        count % 10 in 2..4 -> "проблемы"
+        else -> "проблем"
+    }
+    return "$count $word"
+}
+
 /** "1 мод", "3 мода", "11 модов": Russian plural for mod counts. */
 private fun modsCount(count: Int): String {
     val word = when {
@@ -297,6 +331,12 @@ private fun InstalledModRow(
     anyBusy: Boolean,
     onRemove: () -> Unit,
     onToggle: (Boolean) -> Unit,
+    update: ModUpdate? = null,
+    updating: Boolean = false,
+    onUpdate: () -> Unit = {},
+    problems: List<ModProblem> = emptyList(),
+    installLabel: (ModProblem) -> String? = { null },
+    onInstallMissing: (ModProblem) -> Unit = {},
 ) {
     Row(
         Modifier.fillMaxWidth().softShadow(RoundedCornerShape(16.dp), elevation = 4.dp, color = Color(0x10000000))
@@ -308,18 +348,94 @@ private fun InstalledModRow(
             T("JAR", 11, C.accent, FontWeight.Bold, lineHeight = 14)
         }
         var confirmingRemove by remember(mod.fileName) { mutableStateOf(false) }
+        var confirmingUpdate by remember(mod.fileName) { mutableStateOf(false) }
+        val askUpdate = confirmingUpdate && update != null && !anyBusy
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             T(mod.title, 15, C.text1, FontWeight.Medium, lineHeight = 18, maxLines = 1)
-            if (confirmingRemove && !busy) T("Удалить мод «${mod.title}»? Файл будет удалён из папки сборки.", 12, C.text1, lineHeight = 15, maxLines = 2)
-            else T(if (mod.version.isBlank()) mod.fileName else "${mod.version} (${mod.fileName})", 12, C.text2, lineHeight = 15, maxLines = 1)
+            when {
+                confirmingRemove && !busy -> T("Удалить мод «${mod.title}»? Файл будет удалён из папки сборки.", 12, C.text1, lineHeight = 15, maxLines = 2)
+                askUpdate && update != null -> T("Вместе с обновлением установится ${update.dependencies.joinToString(", ")}.", 12, C.text1, lineHeight = 15, maxLines = 2)
+                update != null -> T("${mod.version.ifBlank { mod.fileName }} → ${update.newVersion}", 12, C.text2, lineHeight = 15, maxLines = 1)
+                else -> T(if (mod.version.isBlank()) mod.fileName else "${mod.version} (${mod.fileName})", 12, C.text2, lineHeight = 15, maxLines = 1)
+            }
+            // One line per mod: the most serious problem, a count of the rest, and "Установить" for a missing mod.
+            problems.firstOrNull()?.takeIf { !confirmingRemove && !askUpdate }?.let { problem ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val rest = if (problems.size > 1) " · ещё ${problems.size - 1}" else ""
+                    T(problem.message + rest, 12, if (problem.error) C.dangerInk else C.text2, lineHeight = 15, maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false))
+                    installLabel(problem)?.let { label ->
+                        val ready = label == "Установить" && !anyBusy
+                        T(label, 12, if (ready) C.accent else C.text2, FontWeight.Medium, lineHeight = 15,
+                            modifier = if (ready) Modifier.clickNoRipple { onInstallMissing(problem) } else Modifier)
+                    }
+                }
+            }
         }
-        if (confirmingRemove && !busy) {
+        if (askUpdate && update != null) {
+            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingUpdate = false })
+            T("Обновить мод", 12, C.accent, FontWeight.Medium, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingUpdate = false; onUpdate() })
+        } else if (update != null && !(confirmingRemove && !busy)) T(if (updating) "Обновляем…" else "Обновить", 12, if (anyBusy) C.text2 else C.accent, FontWeight.Medium, lineHeight = 15,
+            modifier = if (anyBusy) Modifier else Modifier.clickNoRipple { if (update.dependencies.isEmpty()) onUpdate() else confirmingUpdate = true })
+        if (!askUpdate) if (confirmingRemove && !busy) {
             T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingRemove = false })
             T("Удалить мод", 12, if (anyBusy) C.text2 else C.dangerInk, FontWeight.Medium, lineHeight = 15,
                 modifier = if (anyBusy) Modifier else Modifier.clickNoRipple { confirmingRemove = false; onRemove() })
         } else T(if (busy) "Удаляем…" else "Удалить", 12, if (anyBusy) C.text2 else C.dangerInk, FontWeight.Medium, lineHeight = 15,
             modifier = if (anyBusy) Modifier else Modifier.clickNoRipple { confirmingRemove = true })
         com.cactuslauncher.ui.Switch(mod.enabled, horizontalInset = 4.dp) { if (!anyBusy) onToggle(it) }
+    }
+}
+
+/**
+ * Count on the left; on the right "Проверить обновления" (re-reads the folder and checks Modrinth) and, only when
+ * updates exist, "Обновить всё (N)". New dependencies are confirmed in place, like removing a mod.
+ */
+@Composable
+private fun InstalledHeader(
+    title: String,
+    buildId: String,
+    updates: Map<String, ModUpdate>,
+    checking: Boolean,
+    actionId: String?,
+    onCheck: () -> Unit,
+    onUpdateAll: () -> Unit,
+    problems: List<ModProblem> = emptyList(),
+) {
+    var confirming by remember(buildId) { mutableStateOf(false) }
+    val dependencies = updates.values.flatMap { it.dependencies }.distinct()
+    val ask = confirming && updates.isNotEmpty() && actionId == null
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 34.dp).padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (ask) {
+            T("Вместе с обновлениями установятся: ${dependencies.joinToString(", ")}.", 13, C.text1, lineHeight = 16, maxLines = 2, modifier = Modifier.weight(1f))
+            T("Отмена", 13, C.text2, lineHeight = 16, modifier = Modifier.clickNoRipple { confirming = false })
+            UpdateAllButton("Обновить всё", true) { confirming = false; onUpdateAll() }
+        } else {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                T(title, 13, C.text2, lineHeight = 16, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                if (problems.isNotEmpty()) T(problemsCount(problems.size), 13, if (problems.any { it.error }) C.dangerInk else C.text2, FontWeight.Medium, lineHeight = 16)
+            }
+            val canCheck = !checking && actionId == null
+            T(if (checking) "Проверяем…" else "Проверить обновления", 13, if (canCheck) C.accent else C.text2, FontWeight.Medium, lineHeight = 16,
+                modifier = if (canCheck) Modifier.clickNoRipple(onCheck) else Modifier)
+            if (updates.isNotEmpty()) UpdateAllButton(if (actionId == "update:all") "Обновляем…" else "Обновить всё (${updates.size})", actionId == null) {
+                if (dependencies.isEmpty()) onUpdateAll() else confirming = true
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateAllButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(999.dp)).background(if (enabled) C.accentFill else C.fill)
+            .then(if (enabled) Modifier.clickNoRipple(onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        T(label, 13, if (enabled) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 16)
     }
 }
 
@@ -407,7 +523,7 @@ private fun SecurityAssessment(report: ModSecurityReport?, scanning: Boolean) {
 }
 
 @Composable
-private fun EmptyModsState(title: String, description: String, action: String? = null, onAction: (() -> Unit)? = null) {
+internal fun EmptyState(title: String, description: String, action: String? = null, onAction: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.surface).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

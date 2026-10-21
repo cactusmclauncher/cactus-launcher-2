@@ -24,7 +24,16 @@ kotlin {
         }
         val desktopMain by getting {
             dependencies {
-                implementation(compose.desktop.currentOs)
+                // -PallPlatforms bundles Skia for every desktop OS, so one JAR runs on Windows, macOS and Linux.
+                if (providers.gradleProperty("allPlatforms").isPresent) {
+                    implementation(compose.desktop.windows_x64)
+                    implementation(compose.desktop.macos_x64)
+                    implementation(compose.desktop.macos_arm64)
+                    implementation(compose.desktop.linux_x64)
+                    implementation(compose.desktop.linux_arm64)
+                } else {
+                    implementation(compose.desktop.currentOs)
+                }
                 implementation(project(":gamecore"))
             }
         }
@@ -111,8 +120,35 @@ if (isMacHost) {
             exec { commandLine("codesign", "--force", "--deep", "--sign", "-", appBundle.absolutePath) }
         }
     }
+    // Now Playing helper: compiled here instead of running `/usr/bin/swift script.swift` on the user's Mac,
+    // which needs Xcode Command Line Tools and prompts to install them when missing.
+    val nowPlayingSource = layout.projectDirectory.file("../gamecore/src/main/native/macos/CactusNowPlaying.swift")
+    val nowPlayingDir = layout.buildDirectory.dir("generated/resources/macosNowPlaying")
+    kotlin.sourceSets.getByName("desktopMain").resources.srcDir(nowPlayingDir)
+    val compileNowPlayingHelper by tasks.registering(Exec::class) {
+        val executable = nowPlayingDir.get().file("CactusNowPlaying").asFile
+        val compatibleSdk = listOf(
+            "/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk",
+            "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.4.sdk",
+        ).firstOrNull { file(it).isDirectory }
+        val arch = if (System.getProperty("os.arch").lowercase() in setOf("aarch64", "arm64")) "arm64" else "x86_64"
+        inputs.file(nowPlayingSource)
+        outputs.file(executable)
+        doFirst { executable.parentFile.mkdirs() }
+        commandLine(
+            buildList {
+                addAll(listOf("swiftc", "-O", "-target", "$arch-apple-macosx14.2"))
+                if (compatibleSdk != null) addAll(listOf("-sdk", compatibleSdk))
+                addAll(listOf(nowPlayingSource.asFile.absolutePath, "-framework", "Foundation", "-o", executable.absolutePath))
+            },
+        )
+        doLast {
+            exec { commandLine("codesign", "--force", "--sign", "-", executable.absolutePath) }
+        }
+    }
     tasks.matching { it.name == "desktopProcessResources" }.configureEach {
         dependsOn(compileMacAudioHelper)
+        dependsOn(compileNowPlayingHelper)
     }
 }
 
@@ -129,6 +165,17 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "CactusLauncher"
             packageVersion = launcherVersion.get()
+            // JNDI DNS for the _minecraft._tcp SRV lookup of servers.
+            modules("java.naming", "jdk.naming.dns")
         }
     }
+}
+
+// One JAR for Windows, macOS and Linux: ./gradlew :composeApp:packageUniversalJar -PallPlatforms
+val packageUniversalJar by tasks.registering(Copy::class) {
+    dependsOn("packageUberJarForCurrentOS")
+    doFirst { require(providers.gradleProperty("allPlatforms").isPresent) { "Run with -PallPlatforms" } }
+    from(layout.buildDirectory.dir("compose/jars")) { include("*.jar") }
+    into(layout.buildDirectory.dir("compose/universal"))
+    rename { "CactusLauncher-${launcherVersion.get()}-universal.jar" }
 }

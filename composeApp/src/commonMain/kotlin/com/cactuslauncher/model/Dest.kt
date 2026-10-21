@@ -5,4 +5,5 @@ enum class Dest(val label: String) {
     Builds("Сборки"),
     Mods("Моды"),
     News("Новости"),
+    Other("Остальное"),
 }

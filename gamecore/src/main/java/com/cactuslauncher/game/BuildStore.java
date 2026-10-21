@@ -5,7 +5,10 @@ import java.nio.file.*;
 import java.util.*;
 
 public final class BuildStore {
-    public record Build(String id, String name, String version, String loader, String icon) {}
+    /** {@code autoUpdateMods}: check Modrinth and install compatible mod updates before each launch (off by default). */
+    public record Build(String id, String name, String version, String loader, String icon, boolean autoUpdateMods) {
+        public Build(String id, String name, String version, String loader, String icon) { this(id, name, version, loader, icon, false); }
+    }
     private final Path file;
     private final Path directory;
 
@@ -34,7 +37,7 @@ public final class BuildStore {
                 if (!names.add(name.toLowerCase(Locale.ROOT))) throw new IllegalArgumentException();
                 String icon = properties.getProperty(prefix + "icon", "grass");
                 if (!List.of("grass", "dirt", "stone", "diamond", "snapshot", "custom").contains(icon)) throw new IllegalArgumentException();
-                result.add(new Build(id, name, version, loader, icon));
+                result.add(new Build(id, name, version, loader, icon, Boolean.parseBoolean(properties.getProperty(prefix + "autoUpdateMods"))));
             }
             return List.copyOf(result);
         } catch (RuntimeException e) {
@@ -64,7 +67,7 @@ public final class BuildStore {
         var builds = load();
         require(builds, id);
         String valid = uniqueName(name, builds, id);
-        var next = builds.stream().map(b -> b.id().equals(id) ? new Build(id, valid, b.version(), b.loader(), b.icon()) : b).toList();
+        var next = builds.stream().map(b -> b.id().equals(id) ? new Build(id, valid, b.version(), b.loader(), b.icon(), b.autoUpdateMods()) : b).toList();
         save(next);
         return next;
     }
@@ -95,7 +98,15 @@ public final class BuildStore {
         if (!List.of("grass", "dirt", "stone", "diamond", "snapshot", "custom").contains(icon)) throw new IllegalArgumentException("Неизвестная иконка.");
         var builds = load();
         require(builds, id);
-        var next = builds.stream().map(b -> b.id().equals(id) ? new Build(id, b.name(), b.version(), b.loader(), icon) : b).toList();
+        var next = builds.stream().map(b -> b.id().equals(id) ? new Build(id, b.name(), b.version(), b.loader(), icon, b.autoUpdateMods()) : b).toList();
+        save(next);
+        return next;
+    }
+
+    public synchronized List<Build> setAutoUpdateMods(String id, boolean enabled) throws IOException {
+        var builds = load();
+        require(builds, id);
+        var next = builds.stream().map(b -> b.id().equals(id) ? new Build(id, b.name(), b.version(), b.loader(), b.icon(), enabled) : b).toList();
         save(next);
         return next;
     }
@@ -154,19 +165,9 @@ public final class BuildStore {
         return mods;
     }
 
-    public synchronized List<String> readLogs(String id, int maxLines) throws IOException {
-        if (maxLines < 1) throw new IllegalArgumentException("Лимит строк должен быть положительным.");
-        Path logFile = logFile(id);
-        if (!Files.isRegularFile(logFile)) return List.of();
-        var tail = new ArrayDeque<String>(maxLines);
-        try (var reader = Files.newBufferedReader(logFile)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (tail.size() == maxLines) tail.removeFirst();
-                tail.addLast(line);
-            }
-        }
-        return List.copyOf(tail);
+    /** Complete log lines appended since {@code offset}; see {@link LogTail}. */
+    public synchronized LogTail.Chunk readLogChunk(String id, long offset, int maxBytes) throws IOException {
+        return LogTail.read(logFile(id), offset, maxBytes);
     }
 
     private static void require(List<Build> builds, String id) {
@@ -209,6 +210,7 @@ public final class BuildStore {
             properties.setProperty(prefix + "version", build.version());
             properties.setProperty(prefix + "loader", build.loader());
             properties.setProperty(prefix + "icon", build.icon());
+            if (build.autoUpdateMods()) properties.setProperty(prefix + "autoUpdateMods", "true");
         }
         Path temp = Files.createTempFile(file.getParent(), "builds-", ".tmp");
         try {

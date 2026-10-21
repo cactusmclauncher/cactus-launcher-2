@@ -26,13 +26,28 @@ public final class MinecraftLauncher {
     public static Process launch(Path root, String version, String name, int memoryGb, ExternalAuth.Session session,
                                  Path injector, String authlibUrl, boolean automaticHeap, boolean automaticOptimization,
                                  boolean ghostMode) throws IOException {
+        return launch(root, version, name, memoryGb, session, injector, authlibUrl, automaticHeap, automaticOptimization, ghostMode, List.of());
+    }
+
+    /** [extraGameArguments] go after the version's own game arguments, e.g. a server to join (ServerList.quickJoinArguments). */
+    public static Process launch(Path root, String version, String name, int memoryGb, ExternalAuth.Session session,
+                                 Path injector, String authlibUrl, boolean automaticHeap, boolean automaticOptimization,
+                                 boolean ghostMode, List<String> extraGameArguments) throws IOException {
         return launchInDirectory(root, root, version, name, memoryGb, session, injector, authlibUrl,
-                automaticHeap, automaticOptimization, ghostMode);
+                automaticHeap, automaticOptimization, ghostMode, extraGameArguments);
     }
 
     public static Process launchInDirectory(Path root, Path gameDirectory, String version, String name, int memoryGb,
                                              ExternalAuth.Session session, Path injector, String authlibUrl,
                                              boolean automaticHeap, boolean automaticOptimization, boolean ghostMode) throws IOException {
+        return launchInDirectory(root, gameDirectory, version, name, memoryGb, session, injector, authlibUrl,
+                automaticHeap, automaticOptimization, ghostMode, List.of());
+    }
+
+    public static Process launchInDirectory(Path root, Path gameDirectory, String version, String name, int memoryGb,
+                                             ExternalAuth.Session session, Path injector, String authlibUrl,
+                                             boolean automaticHeap, boolean automaticOptimization, boolean ghostMode,
+                                             List<String> extraGameArguments) throws IOException {
         JsonObject profile;
         try (var reader = Files.newBufferedReader(root.resolve("versions/" + version + "/" + version + ".json"))) {
             profile = JsonParser.parseReader(reader).getAsJsonObject();
@@ -129,6 +144,7 @@ public final class MinecraftLauncher {
         command.add(info.get("mainClass").getAsString());
         if (info.has("arguments")) append(command, info.getAsJsonObject("arguments").getAsJsonArray("game"), values);
         else for (String argument : info.get("minecraftArguments").getAsString().split(" +")) command.add(expand(argument, values));
+        command.addAll(extraGameArguments);
         Files.createDirectories(root.resolve("logs"));
         Path launchLog = root.resolve("logs/cactus-launch.log");
         Files.newBufferedWriter(launchLog, StandardCharsets.UTF_8, StandardOpenOption.CREATE,

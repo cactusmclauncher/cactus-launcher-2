@@ -28,8 +28,10 @@ public final class GhostModeDaemon {
             gameStarted = true;
             writeStatus(status, "OK");
             startupConfirmed = true;
+            Thread playtime = trackPlaytime(game, data.gameDirectory());
             writeGameOutput(game, data.logFile());
             game.waitFor();
+            playtime.join(5000);
             waitForStatusAcknowledgement(status);
             Files.deleteIfExists(status);
             new ProcessBuilder(data.launcherCommand())
@@ -49,6 +51,25 @@ public final class GhostModeDaemon {
         } finally {
             try { Files.deleteIfExists(handoff); } catch (IOException ignored) {}
         }
+    }
+
+    /** Counts play time like the launcher does, since the launcher is closed while Ghost Mode runs. */
+    private static Thread trackPlaytime(Process game, Path buildFolder) {
+        Playtime.Session session = new Playtime(buildFolder).start(System.currentTimeMillis());
+        Thread thread = new Thread(() -> {
+            try {
+                while (!game.waitFor(Playtime.CHECKPOINT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    try { session.checkpoint(System.currentTimeMillis()); } catch (IOException ignored) { /* Try again next time. */ }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                try { session.stop(System.currentTimeMillis()); } catch (IOException ignored) {}
+            }
+        }, "cactus-ghost-playtime");
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
     }
 
     private static Handoff read(Path file) throws IOException {

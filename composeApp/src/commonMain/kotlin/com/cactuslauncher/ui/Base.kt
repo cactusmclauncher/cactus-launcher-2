@@ -34,6 +34,8 @@ import com.cactuslauncher.resources.mounts_of_mayhem
 import com.cactuslauncher.resources.minecraft_release
 import com.cactuslauncher.resources.minecraft_snapshot
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.imageResource
+import org.jetbrains.compose.resources.DrawableResource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -56,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
@@ -179,6 +182,18 @@ fun BuildArtwork(label: String, color: Color, modifier: Modifier = Modifier) {
 fun BuildArtwork(label: String, modifier: Modifier = Modifier) {
     Image(painterResource(if (label.contains("snapshot", true) || label.equals("dirt", true)) Res.drawable.minecraft_snapshot else Res.drawable.minecraft_release),
         contentDescription = "Иконка Minecraft: $label", modifier = modifier.clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Fit)
+}
+
+/** Crisp nearest-neighbour draw of a 16×16-style Minecraft item sprite. */
+@Composable
+fun PixelIcon(res: DrawableResource, contentDescription: String?, modifier: Modifier = Modifier) {
+    Image(
+        bitmap = imageResource(res),
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = ContentScale.Fit,
+        filterQuality = FilterQuality.None,
+    )
 }
 
 @Composable

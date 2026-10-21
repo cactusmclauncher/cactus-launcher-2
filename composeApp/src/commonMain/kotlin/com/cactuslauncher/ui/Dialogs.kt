@@ -79,7 +79,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
-fun Modal(onDismiss: () -> Unit, compact: Boolean = false, height: androidx.compose.ui.unit.Dp = if (compact) 460.dp else 640.dp, content: @Composable () -> Unit) {
+/** [width] above the default lets the dialog shrink with the window; [onKey] sees key presses before Esc closes. */
+fun Modal(
+    onDismiss: () -> Unit,
+    compact: Boolean = false,
+    height: androidx.compose.ui.unit.Dp = if (compact) 460.dp else 640.dp,
+    width: androidx.compose.ui.unit.Dp = 560.dp,
+    onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { false },
+    content: @Composable () -> Unit,
+) {
     val focus = remember { FocusRequester() }
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -88,14 +96,15 @@ fun Modal(onDismiss: () -> Unit, compact: Boolean = false, height: androidx.comp
     }
     Box(
         Modifier.fillMaxSize().focusRequester(focus).onPreviewKeyEvent {
-            if (it.key == Key.Escape && it.type == KeyEventType.KeyDown) { onDismiss(); true } else false
+            if (onKey(it)) true
+            else if (it.key == Key.Escape && it.type == KeyEventType.KeyDown) { onDismiss(); true } else false
         }.focusable().background(C.scrim)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
-                .width(560.dp)
+                .then(if (width <= 560.dp) Modifier.width(width) else Modifier.padding(horizontal = 32.dp).widthIn(max = width).fillMaxWidth())
                 .padding(vertical = 16.dp)
                 .heightIn(max = height)
                 .fillMaxHeight()
