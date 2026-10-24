@@ -339,6 +339,33 @@ fun SettingsDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     T("ПЛЕЕР", 13, C.text2, lineHeight = 16)
                     GameRow("Показывать плеер") { Switch(settings.showPlayer) { settings.showPlayer = it } }
+                    if (settings.launcherMusic && settings.radioEnabled) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            T("Режим плеера", 14, C.text1, lineHeight = 18)
+                            AnimatedSegments(
+                                listOf("Сторонняя музыка", "Музыка лаунчера"),
+                                if (settings.playerMode == "launcher") 1 else 0,
+                                { settings.playerMode = if (it == 1) "launcher" else "external" },
+                                fill = C.fill,
+                            )
+                        }
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    T("МУЗЫКА C418", 13, C.text2, lineHeight = 16)
+                    GameRow("Радио") {
+                        Switch(settings.radioEnabled) {
+                            settings.radioEnabled = it
+                            settings.playerMode = if (it) "launcher" else "external"
+                        }
+                    }
+                    GameRow("Музыка в лаунчере") {
+                        Switch(settings.launcherMusic) {
+                            settings.launcherMusic = it
+                            if (!it) settings.playerMode = "external"
+                        }
+                    }
+                    GameRow("Музыка C418 в меню игры") { Switch(settings.menuMusicPack) { settings.menuMusicPack = it } }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     T("МОДЫ", 13, C.text2, lineHeight = 16)
@@ -648,8 +675,14 @@ fun InitialSetupDialog(
                                     exit = shrinkVertically(tween(CactusMotion.quick, easing = CactusMotion.easeOut)) +
                                         fadeOut(tween(CactusMotion.quick, easing = CactusMotion.easeOut)),
                                 ) {
-                                    SetupToggle("Автоперевод описаний модов", settings.translateModDescriptions) {
-                                        settings.translateModDescriptions = it
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        SetupToggle("Автоперевод описаний модов", settings.translateModDescriptions) {
+                                            settings.translateModDescriptions = it
+                                        }
+                                        SetupToggle("Радио", settings.radioEnabled) {
+                                            settings.radioEnabled = it
+                                            settings.playerMode = if (it) "launcher" else "external"
+                                        }
                                     }
                                 }
                             }

@@ -33,7 +33,16 @@ internal class MacAudioMixer {
     private var cachedSystemArtworkData: String? = null
     private var cachedSystemArtwork: ImageBitmap? = null
     private var nextFallbackAt = 0L
-    private var fallbackTrack: TrackSnapshot? = null
+    @Volatile private var fallbackTrack: TrackSnapshot? = null
+    /** Where the track shown last came from; seeking goes to the same place. */
+    @Volatile private var trackSource: TrackSource? = null
+    private var fallbackSource: TrackSource? = null
+
+    private sealed interface TrackSource {
+        object NowPlaying : TrackSource
+        object Spotify : TrackSource
+        class Browser(val app: String) : TrackSource
+    }
 
     init {
         Runtime.getRuntime().addShutdownHook(Thread { synchronized(this) {
@@ -82,14 +91,44 @@ internal class MacAudioMixer {
         command("TRACK\t$key")
     }
 
+    /**
+     * Seeks the player the last track came from: the system Now Playing session through the helper
+     * (MRMediaRemoteSetElapsedTime), Spotify through AppleScript, or the playing media element of a browser tab.
+     */
+    fun seekTrack(positionSeconds: Int) {
+        if (!playerEnabled) return
+        val seconds = positionSeconds.coerceAtLeast(0)
+        when (val source = trackSource) {
+            TrackSource.NowPlaying -> synchronized(metadataLock) {
+                if (metadataProcess?.isAlive != true) throw IOException("Helper Now Playing не запущен.")
+                if (requestNowPlaying("SEEK\t$seconds") != "OK") throw IOException("Этот плеер не поддерживает перемотку.")
+            }
+            TrackSource.Spotify -> {
+                runAppleScript("if application \"Spotify\" is running then tell application \"Spotify\" to set player position to $seconds")
+                fallbackTrack = fallbackTrack?.copy(positionSeconds = seconds)
+            }
+            is TrackSource.Browser -> {
+                if (!seekBrowser(source.app, seconds)) throw IOException("Не удалось перемотать трек в браузере.")
+                fallbackTrack = fallbackTrack?.copy(positionSeconds = seconds)
+            }
+            null -> throw IOException("Не найден активный медиаплеер.")
+        }
+    }
+
     fun currentTrack(): TrackSnapshot? = synchronized(metadataLock) {
         if (!playerEnabled) return@synchronized null
         val systemTrack = readSystemTrack()
         if (!playerEnabled) return@synchronized null
         // A paused system session is valid too; do not scan every browser.
-        if (systemTrack != null) return@synchronized systemTrack
+        if (systemTrack != null) {
+            trackSource = TrackSource.NowPlaying
+            return@synchronized systemTrack
+        }
         val now = System.nanoTime()
-        if (now < nextFallbackAt) return@synchronized fallbackTrack
+        if (now < nextFallbackAt) {
+            trackSource = fallbackSource.takeIf { fallbackTrack != null }
+            return@synchronized fallbackTrack
+        }
         nextFallbackAt = now + java.util.concurrent.TimeUnit.SECONDS.toNanos(15)
         val spotifyScript = """
             if not (application "Spotify" is running) then return ""
@@ -106,23 +145,27 @@ internal class MacAudioMixer {
         val browserTracks = browserApps.mapNotNull { browser ->
             if (!playerEnabled) return@mapNotNull null
             try {
-                readBrowserTrack(browser)
+                readBrowserTrack(browser)?.let { browser to it }
             } catch (error: IOException) {
                 if (browser == "Helium" && !isApplicationNotRunning(error.message.orEmpty())) heliumError = error
                 null
             }
         }
         if (!playerEnabled) return@synchronized null
-        val browserTrack = browserTracks.firstOrNull { track ->
+        val browserTrack = browserTracks.firstOrNull { (_, track) ->
             track.substringAfter('\t').split('\t').getOrNull(4)?.let(::decodeMetadata) == "playing"
         } ?: browserTracks.firstOrNull()
-        val output = when {
-            browserTrack?.substringAfter('\t')?.split('\t')?.getOrNull(4)?.let(::decodeMetadata) == "playing" -> browserTrack
-            spotifyTrack.isNotBlank() -> spotifyTrack
-            else -> browserTrack.orEmpty()
+        val browserPlaying = browserTrack?.second?.substringAfter('\t')?.split('\t')?.getOrNull(4)?.let(::decodeMetadata) == "playing"
+        val (output, source) = when {
+            browserPlaying -> browserTrack!!.second to TrackSource.Browser(browserTrack.first)
+            spotifyTrack.isNotBlank() -> spotifyTrack to TrackSource.Spotify
+            browserTrack != null -> browserTrack.second to TrackSource.Browser(browserTrack.first)
+            else -> "" to null
         }
         if (output.isBlank()) {
             fallbackTrack = null
+            fallbackSource = null
+            trackSource = null
             heliumError?.let { throw it }
             return@synchronized null
         }
@@ -138,7 +181,12 @@ internal class MacAudioMixer {
             durationSeconds = fields[3].toDoubleOrNull()?.toInt()?.coerceAtLeast(0) ?: 0,
             isPlaying = fields[4].equals("playing", ignoreCase = true),
             artwork = artwork,
-        ).also { fallbackTrack = it }
+            canSeek = true,
+        ).also {
+            fallbackTrack = it
+            fallbackSource = source
+            trackSource = source
+        }
     }
 
     fun setPlayerEnabled(enabled: Boolean) {
@@ -158,6 +206,8 @@ internal class MacAudioMixer {
             cachedArtworkUrl = null
             cachedArtwork = null
             fallbackTrack = null
+            fallbackSource = null
+            trackSource = null
             nextFallbackAt = 0L
         }
     }
@@ -186,7 +236,28 @@ internal class MacAudioMixer {
             metadataOutput = started.inputStream.bufferedReader(StandardCharsets.UTF_8)
             metadataProcess = started
         }
-        metadataInput!!.apply { write("NOW_PLAYING"); newLine(); flush() }
+        val fields = requestNowPlaying("NOW_PLAYING").split('\t')
+        if (fields.firstOrNull() != "NOW_PLAYING" || fields.size != 7) return@runCatching null
+        if (fields[6] != cachedSystemArtworkData) {
+            cachedSystemArtwork = fields[6].takeIf { it.isNotBlank() }?.let { data ->
+                runCatching { Image.makeFromEncoded(Base64.getDecoder().decode(data)).toComposeImageBitmap() }.getOrNull()
+            }
+            cachedSystemArtworkData = fields[6]
+        }
+        val durationSeconds = fields[4].toDoubleOrNull()?.toInt()?.coerceAtLeast(0) ?: 0
+        TrackSnapshot(
+            title = decode(fields[1]), artist = decode(fields[2]),
+            positionSeconds = fields[3].toDoubleOrNull()?.toInt()?.coerceAtLeast(0) ?: 0,
+            durationSeconds = durationSeconds,
+            isPlaying = fields[5] == "playing",
+            artwork = cachedSystemArtwork,
+            canSeek = durationSeconds > 0,
+        )
+    }.getOrNull()
+
+    /** Sends one request line to the Now Playing helper and returns its reply line. Call with [metadataLock] held. */
+    private fun requestNowPlaying(request: String): String {
+        metadataInput!!.apply { write(request); newLine(); flush() }
         val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(25)
         while (!metadataOutput!!.ready()) {
             if (metadataProcess?.isAlive != true || System.nanoTime() >= deadline) {
@@ -195,21 +266,40 @@ internal class MacAudioMixer {
             }
             Thread.sleep(20)
         }
-        val fields = (metadataOutput!!.readLine() ?: throw IOException("Helper Now Playing завершился.")).split('\t')
-        if (fields.firstOrNull() != "NOW_PLAYING" || fields.size != 7) return@runCatching null
-        if (fields[6] != cachedSystemArtworkData) {
-            cachedSystemArtwork = fields[6].takeIf { it.isNotBlank() }?.let { data ->
-                runCatching { Image.makeFromEncoded(Base64.getDecoder().decode(data)).toComposeImageBitmap() }.getOrNull()
-            }
-            cachedSystemArtworkData = fields[6]
-        }
-        TrackSnapshot(
-            title = decode(fields[1]), artist = decode(fields[2]),
-            positionSeconds = fields[3].toDoubleOrNull()?.toInt()?.coerceAtLeast(0) ?: 0,
-            durationSeconds = fields[4].toDoubleOrNull()?.toInt()?.coerceAtLeast(0) ?: 0,
-            isPlaying = fields[5] == "playing", artwork = cachedSystemArtwork,
-        )
-    }.getOrNull()
+        return metadataOutput!!.readLine() ?: throw IOException("Helper Now Playing завершился.")
+    }
+
+    /**
+     * Sets currentTime of a media element in [browser]: a playing one in any tab first, otherwise one that
+     * has been started. True when a tab took it.
+     */
+    private fun seekBrowser(browser: String, seconds: Int): Boolean {
+        fun javascript(anyStarted: Boolean) = (
+            "(()=>{const a=[...document.querySelectorAll('audio,video')];" +
+                "const v=a.find(x=>!x.paused&&!x.ended)" + (if (anyStarted) "||a.find(x=>x.currentTime>0)" else "") + ";" +
+                "if(!v)return '';v.currentTime=$seconds;return 'ok'})()"
+            ).replace("\\", "\\\\").replace("\"", "\\\"")
+        val appTarget = if (browser == "Helium") "application id \"net.imput.helium\"" else "application \"$browser\""
+        fun inTab(code: String) = if (browser == "Safari") "do JavaScript \"$code\" in t" else "execute t javascript \"$code\""
+        fun pass(anyStarted: Boolean) = """
+            repeat with w in windows
+              repeat with t in tabs of w
+                try
+                  if (${inTab(javascript(anyStarted))}) is "ok" then return "ok"
+                end try
+              end repeat
+            end repeat
+        """
+        val script = """
+            if not ($appTarget is running) then return ""
+            tell $appTarget
+            ${pass(false)}
+            ${pass(true)}
+            end tell
+            return ""
+        """.trimIndent()
+        return runAppleScript(script) == "ok"
+    }
 
     private fun readBrowserTrack(browser: String): String? {
         val javascript = """

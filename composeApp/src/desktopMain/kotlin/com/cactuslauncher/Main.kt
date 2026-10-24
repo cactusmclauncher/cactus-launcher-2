@@ -15,12 +15,12 @@ import com.cactuslauncher.theme.C
 
 fun main() = application {
     val state = rememberWindowState(size = DpSize(1200.dp, 760.dp))
+    val game = remember { GameServiceImpl() }
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = { game.stopLauncherMusic(); exitApplication() },
         state = state,
         title = "Cactus Launcher 2.0",
     ) {
-        val game = remember { GameServiceImpl() }
         val dark = C.dark
         // macOS: match the title bar to the launcher theme.
         LaunchedEffect(dark) {
@@ -33,7 +33,7 @@ fun main() = application {
         // Light keeps the default selection colours.
         val selection = if (dark) TextSelectionColors(C.accent, C.accent.copy(alpha = 0.35f)) else LocalTextSelectionColors.current
         CompositionLocalProvider(LocalTextSelectionColors provides selection) {
-            App(game, onGhostMode = ::exitApplication)
+            App(game, onGhostMode = { game.stopLauncherMusic(); exitApplication() })
         }
     }
 }

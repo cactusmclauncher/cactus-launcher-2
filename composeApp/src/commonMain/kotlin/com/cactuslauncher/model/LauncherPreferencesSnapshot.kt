@@ -17,4 +17,10 @@ data class LauncherPreferencesSnapshot(
     val folder: String,
     /** "system", "light" or "dark". */
     val theme: String = "system",
+    /** C418 music when the launcher opens. */
+    val launcherMusic: Boolean = true,
+    /** The resource pack that puts the C418 table into the game's title-screen music. */
+    val menuMusicPack: Boolean = true,
+    val playerMode: String = "external",
+    val radioEnabled: Boolean = false,
 )

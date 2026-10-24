@@ -35,6 +35,12 @@ kotlin {
                     implementation(compose.desktop.currentOs)
                 }
                 implementation(project(":gamecore"))
+                // MPRIS "now playing" on Linux over the D-Bus session bus, without playerctl.
+                // The native transport uses JDK 16+ Unix domain sockets, so no JNI is bundled.
+                implementation("com.github.hypfvieh:dbus-java-core:5.2.2")
+                implementation("com.github.hypfvieh:dbus-java-transport-native-unixsocket:5.2.2")
+                // dbus-java logs through SLF4J; the no-op binding keeps the console free of its warnings.
+                implementation("org.slf4j:slf4j-nop:2.0.17")
             }
         }
     }
@@ -166,7 +172,8 @@ compose.desktop {
             packageName = "CactusLauncher"
             packageVersion = launcherVersion.get()
             // JNDI DNS for the _minecraft._tcp SRV lookup of servers.
-            modules("java.naming", "jdk.naming.dns")
+            // jdk.security.auth: dbus-java reads the Unix uid from it to log in to the D-Bus session bus (Linux player).
+            modules("java.naming", "jdk.naming.dns", "jdk.security.auth")
         }
     }
 }

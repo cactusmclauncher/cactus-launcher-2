@@ -35,6 +35,25 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @Composable
 fun Sidebar(
@@ -49,6 +68,9 @@ fun Sidebar(
     profileName: String,
     onOpenProfiles: () -> Unit,
     profileAvatar: androidx.compose.ui.graphics.ImageBitmap? = null,
+    /** Live position in seconds; advances between polls while the track plays. */
+    trackPosition: () -> Double = { currentTrack?.positionSeconds?.toDouble() ?: 0.0 },
+    onSeek: (Int) -> Unit = {},
 ) {
     val paneWidth by animateDpAsState(if (playerExpanded) 340.dp else 240.dp, tween(220, easing = CactusMotion.easeOut), label = "player-pane")
     Column(
@@ -83,7 +105,7 @@ fun Sidebar(
         Spacer(if (playerExpanded) Modifier.height(0.dp) else Modifier.weight(1f))
 
         if (playerExpanded && currentTrack != null) {
-            PlayerPopup(onTogglePlayer, currentTrack, trackError, onTrackCommand)
+            PlayerPopup(onTogglePlayer, currentTrack, trackError, onTrackCommand, trackPosition, onSeek)
         } else if (currentTrack != null) {
             Row(
                 Modifier
@@ -156,6 +178,8 @@ private fun PlayerPopup(
     track: TrackSnapshot?,
     error: String?,
     onTrackCommand: (TrackCommand) -> Unit,
+    trackPosition: () -> Double,
+    onSeek: (Int) -> Unit,
 ) {
     Column(
         Modifier
@@ -186,21 +210,110 @@ private fun PlayerPopup(
                 T(track?.artist ?: "Откройте аудио в браузере или плеере", 12, C.text2, lineHeight = 15, maxLines = 1)
             }
         }
-        val position = track?.positionSeconds ?: 0
         val duration = track?.durationSeconds ?: 0
-        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(C.fill)) {
-            Box(Modifier.fillMaxWidth(if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(C.accent))
+        val playing = track?.isPlaying == true
+        // Redraw a few times a second while playing so the bar moves between polls.
+        var tick by remember { mutableIntStateOf(0) }
+        LaunchedEffect(playing) { while (playing) { delay(100); tick++ } }
+        var dragFraction by remember { mutableStateOf<Float?>(null) }
+        val livePosition = tick.let { trackPosition() }
+        val fraction = dragFraction ?: if (duration > 0) (livePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
+        val position = dragFraction?.let { (it * duration).roundToInt() } ?: livePosition.toInt()
+        if (duration > 0) {
+            SeekBar(
+                fraction = fraction,
+                enabled = track != null && track.canSeek,
+                dragging = dragFraction != null,
+                onDrag = { dragFraction = it },
+                onRelease = { value ->
+                    dragFraction = null
+                    onSeek((value * duration).roundToInt())
+                },
+                onCancel = { dragFraction = null },
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                T(formatTrackTime(position), 11, C.text2, lineHeight = 14)
+                T(formatTrackTime(duration), 11, C.text2, lineHeight = 14)
+            }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            T(formatTrackTime(position), 11, C.text2, lineHeight = 14)
-            T(formatTrackTime(duration), 11, C.text2, lineHeight = 14)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TrackButton("|◀", "Предыдущий трек") { onTrackCommand(TrackCommand.PREVIOUS) }
-            TrackButton(if (track?.isPlaying == true) "❚❚" else "▶", "Воспроизведение или пауза") { onTrackCommand(TrackCommand.PLAY_PAUSE) }
-            TrackButton("▶|", "Следующий трек") { onTrackCommand(TrackCommand.NEXT) }
+        if (track?.supported != false || track?.canSkip == true) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (track?.supported != false || track?.canSkip == true) {
+                    TrackButton("|◀", "Предыдущий трек") { onTrackCommand(TrackCommand.PREVIOUS) }
+                }
+                if (track?.supported != false || track?.canPause == true) {
+                    TrackButton(if (track?.isPlaying == true) "❚❚" else "▶", "Воспроизведение или пауза") { onTrackCommand(TrackCommand.PLAY_PAUSE) }
+                }
+                if (track?.supported != false || track?.canSkip == true) {
+                    TrackButton("▶|", "Следующий трек") { onTrackCommand(TrackCommand.NEXT) }
+                }
+            }
         }
         if (error != null) T(error, 12, C.text2, lineHeight = 15)
+    }
+}
+
+/**
+ * The 4 dp progress bar; click or drag it to seek, the position is applied on release. The bar keeps its 4 dp in the
+ * layout while the pointer area around it is 16 dp tall, and a small thumb shows only while hovering or dragging.
+ */
+@Composable
+private fun SeekBar(
+    fraction: Float,
+    enabled: Boolean,
+    dragging: Boolean,
+    onDrag: (Float) -> Unit,
+    onRelease: (Float) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val hoverSource = remember { MutableInteractionSource() }
+    val hovered by hoverSource.collectIsHoveredAsState()
+    val drag by rememberUpdatedState(onDrag)
+    val release by rememberUpdatedState(onRelease)
+    val cancel by rememberUpdatedState(onCancel)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .layout { measurable, constraints ->
+                val barHeight = 4.dp.roundToPx()
+                val touchHeight = 16.dp.roundToPx()
+                val placeable = measurable.measure(constraints.copy(minHeight = touchHeight, maxHeight = touchHeight))
+                layout(placeable.width, barHeight) { placeable.place(0, (barHeight - touchHeight) / 2) }
+            }
+            .then(
+                if (!enabled) Modifier
+                else Modifier
+                    .hoverable(hoverSource)
+                    .pointerHoverIcon(PointerIcon.Hand)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            down.consume()
+                            fun at(x: Float) = if (size.width > 0) (x / size.width).coerceIn(0f, 1f) else 0f
+                            var value = at(down.position.x)
+                            drag(value)
+                            var released = false
+                            while (!released) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                if (change.pressed) {
+                                    value = at(change.position.x)
+                                    drag(value)
+                                } else released = true
+                                change.consume()
+                            }
+                            if (released) release(value) else cancel()
+                        }
+                    },
+            ),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(C.fill)) {
+            Box(Modifier.fillMaxWidth(fraction).height(4.dp).clip(RoundedCornerShape(2.dp)).background(C.accent))
+        }
+        if (enabled && (hovered || dragging)) {
+            Box(Modifier.align(BiasAlignment(fraction * 2f - 1f, 0f)).size(10.dp).clip(CircleShape).background(C.accent))
+        }
     }
 }
 

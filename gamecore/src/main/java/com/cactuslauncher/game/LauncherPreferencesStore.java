@@ -24,7 +24,19 @@ public final class LauncherPreferencesStore {
             boolean modAntivirusEnabled,
             String resolution,
             String folder,
-            String theme) {}
+            String theme,
+            boolean launcherMusic,
+            boolean menuMusicPack,
+            String playerMode,
+            boolean radioEnabled) {
+        /** Settings without the music switches (both on). */
+        public Preferences(boolean setupComplete, boolean showPlayer, int parallelDownloads, int memoryGb, boolean automaticMemory,
+                           boolean autoJavaOptimization, boolean ghostMode, boolean fullscreen, boolean autoUpdate, boolean advancedMode,
+                           boolean translateModDescriptions, boolean modAntivirusEnabled, String resolution, String folder, String theme) {
+            this(setupComplete, showPlayer, parallelDownloads, memoryGb, automaticMemory, autoJavaOptimization, ghostMode, fullscreen,
+                    autoUpdate, advancedMode, translateModDescriptions, modAntivirusEnabled, resolution, folder, theme, true, true, "external", false);
+        }
+    }
 
     public static final java.util.List<String> THEMES = java.util.List.of("system", "light", "dark");
 
@@ -56,7 +68,10 @@ public final class LauncherPreferencesStore {
                     bool(values, "automaticMemory"), bool(values, "autoJavaOptimization"),
                     bool(values, "ghostMode"), bool(values, "fullscreen"), optionalBool(values, "autoUpdate", true),
                     optionalBool(values, "advancedMode", false),
-                    bool(values, "translateModDescriptions"), bool(values, "modAntivirusEnabled"), resolution, folder, theme);
+                    bool(values, "translateModDescriptions"), bool(values, "modAntivirusEnabled"), resolution, folder, theme,
+                    optionalBool(values, "launcherMusic", true), optionalBool(values, "menuMusicPack", true),
+                    optionalEnum(values, "playerMode", "external", java.util.List.of("external", "launcher")),
+                    optionalBool(values, "radioEnabled", false));
         } catch (RuntimeException e) {
             throw new IOException("Файл настроек повреждён. Исходный файл сохранён.", e);
         }
@@ -66,7 +81,7 @@ public final class LauncherPreferencesStore {
         if (value == null || value.parallelDownloads() < 1 || value.parallelDownloads() > 16
                 || value.memoryGb() < 2 || value.memoryGb() > 16 || value.folder() == null || value.folder().isBlank()
                 || !java.util.List.of("1280 × 720", "1600 × 900", "1920 × 1080", "2560 × 1440").contains(value.resolution())
-                || !THEMES.contains(value.theme()))
+                || !THEMES.contains(value.theme()) || !java.util.List.of("external", "launcher").contains(value.playerMode()))
             throw new IOException("Настройки лаунчера содержат недопустимые значения.");
         if (Files.isSymbolicLink(file)) throw new IOException("Файл настроек не должен быть символической ссылкой.");
         Files.createDirectories(file.getParent());
@@ -87,6 +102,10 @@ public final class LauncherPreferencesStore {
         values.setProperty("resolution", value.resolution());
         values.setProperty("folder", value.folder());
         values.setProperty("theme", value.theme());
+        values.setProperty("launcherMusic", Boolean.toString(value.launcherMusic()));
+        values.setProperty("menuMusicPack", Boolean.toString(value.menuMusicPack()));
+        values.setProperty("playerMode", value.playerMode());
+        values.setProperty("radioEnabled", Boolean.toString(value.radioEnabled()));
         Path temp = file.resolveSibling(file.getFileName() + ".tmp-" + UUID.randomUUID());
         try {
             try (var output = Files.newOutputStream(temp)) { values.store(output, null); }
@@ -108,6 +127,12 @@ public final class LauncherPreferencesStore {
         if (value == null) return fallback;
         if (!"true".equals(value) && !"false".equals(value)) throw new IllegalArgumentException();
         return Boolean.parseBoolean(value);
+    }
+
+    private static String optionalEnum(Properties values, String key, String fallback, java.util.List<String> allowed) {
+        String value = values.getProperty(key, fallback);
+        if (!allowed.contains(value)) throw new IllegalArgumentException();
+        return value;
     }
 
     private static String required(Properties values, String key) {

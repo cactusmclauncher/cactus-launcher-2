@@ -4,6 +4,8 @@ plugins {
 
 dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
+    // Ogg Vorbis decoder for the C418 music (pure Java, LGPL-2.0-or-later, no ServiceLoader lookup).
+    implementation("org.jcraft:jorbis:0.0.17")
     testImplementation(platform("org.junit:junit-bom:5.11.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

@@ -95,8 +95,17 @@ interface GameService {
     suspend fun setAudioSessionVolume(id: String, volume: Float)
     suspend fun setAudioSessionMuted(id: String, muted: Boolean)
     suspend fun controlTrack(command: TrackCommand)
+    /** Moves the current track to [positionSeconds] from its start. */
+    suspend fun seekTrack(positionSeconds: Int)
     suspend fun currentTrack(): TrackSnapshot?
+    suspend fun launcherTrack(): TrackSnapshot?
+    suspend fun skipLauncherTrack(forward: Boolean)
+    suspend fun setLauncherTrackPaused(paused: Boolean)
     suspend fun setPlayerEnabled(enabled: Boolean)
+    /** On: plays one C418 track unless music or a game is already running. Off: stops it at once. */
+    fun setLauncherMusic(enabled: Boolean)
+    /** Adds or removes the title-screen music pack in every installed build that is not running. */
+    suspend fun setMenuMusicPack(enabled: Boolean)
     suspend fun profiles(): ProfileSnapshot
     suspend fun addProfile(name: String): ProfileSnapshot
     suspend fun renameProfile(id: String, name: String): ProfileSnapshot

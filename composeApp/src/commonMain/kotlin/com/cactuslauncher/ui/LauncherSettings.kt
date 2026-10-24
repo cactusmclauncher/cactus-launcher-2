@@ -22,11 +22,16 @@ class LauncherSettings(gameDir: String) {
     var resolution by mutableStateOf("1920 × 1080")
     var folder by mutableStateOf(gameDir)
     var theme by mutableStateOf("system")
+    var launcherMusic by mutableStateOf(true)
+    var menuMusicPack by mutableStateOf(true)
+    var playerMode by mutableStateOf("external")
+    var radioEnabled by mutableStateOf(false)
 
     fun snapshot(setupComplete: Boolean) = LauncherPreferencesSnapshot(
         setupComplete, showPlayer, parallelDownloads, memoryGb, automaticMemory,
         autoJavaOptimization, ghostMode, fullscreen, autoUpdate, advancedMode,
         translateModDescriptions, modAntivirusEnabled, resolution, folder, theme,
+        launcherMusic, menuMusicPack, playerMode, radioEnabled,
     )
 
     fun restore(value: LauncherPreferencesSnapshot) {
@@ -44,6 +49,10 @@ class LauncherSettings(gameDir: String) {
         resolution = value.resolution
         folder = value.folder
         theme = value.theme
+        launcherMusic = value.launcherMusic
+        menuMusicPack = value.menuMusicPack
+        launcherModeRestore(value.playerMode, value.launcherMusic, value.radioEnabled)
+        radioEnabled = value.radioEnabled
     }
 
     fun reset(gameDir: String) {
@@ -61,5 +70,13 @@ class LauncherSettings(gameDir: String) {
         resolution = "1920 × 1080"
         folder = gameDir
         theme = "system"
+        launcherMusic = true
+        menuMusicPack = true
+        playerMode = "external"
+        radioEnabled = false
+    }
+
+    private fun launcherModeRestore(value: String, musicEnabled: Boolean, radioEnabled: Boolean) {
+        playerMode = if (musicEnabled && radioEnabled && value == "launcher") "launcher" else "external"
     }
 }

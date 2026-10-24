@@ -10,4 +10,8 @@ data class TrackSnapshot(
     val isPlaying: Boolean,
     val artwork: ImageBitmap? = null,
     val supported: Boolean = true,
+    /** False when the player reports that it cannot jump to a position (MPRIS CanSeek, GSMTC controls). */
+    val canSeek: Boolean = true,
+    val canSkip: Boolean = false,
+    val canPause: Boolean = false,
 )

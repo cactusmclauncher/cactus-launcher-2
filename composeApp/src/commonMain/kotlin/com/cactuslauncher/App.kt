@@ -88,7 +88,7 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
     val builds = remember { BuildsState(game, scope, preferences, profiles, messages) }
     val mods = remember { ModsState(game, scope, preferences, builds, navigation, messages) }
     val logs = remember { LogsState(game, scope, preferences, profiles, messages) }
-    val player = remember { PlayerState(game, scope) { preferences.showPlayer } }
+    val player = remember { PlayerState(game, scope, { preferences.showPlayer }) { preferences.playerMode == "launcher" } }
     val screenshots = remember { ScreenshotsState(game, scope, builds, messages) }
     val servers = remember { ServersState(game, scope, builds, messages) }
     val otherSection = navigation.otherSection
@@ -160,7 +160,20 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
         if (navigation.settingsOpen || builds.selectedBuild != null) settings.loadJavaOptimizationInfo()
     }
     LaunchedEffect(preferences.showPlayer) { player.applyEnabled(preferences.showPlayer) }
-    LaunchedEffect(preferences.showPlayer) { if (preferences.showPlayer) player.poll() }
+    // C418 music: waits for the saved settings so a "off" choice never plays a note on start.
+    LaunchedEffect(settings.settingsReady, preferences.launcherMusic, preferences.playerMode) {
+        if (settings.settingsReady) {
+            game.setLauncherMusic(preferences.launcherMusic && preferences.radioEnabled && preferences.playerMode == "launcher")
+        }
+    }
+    LaunchedEffect(settings.settingsReady, preferences.menuMusicPack) {
+        if (settings.settingsReady) {
+            try { game.setMenuMusicPack(preferences.menuMusicPack) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { game.reportError("menu-music-pack", e) }
+        }
+    }
+    LaunchedEffect(preferences.showPlayer, preferences.playerMode) { if (preferences.showPlayer) player.poll() }
     LaunchedEffect(player.currentTrack) { if (player.currentTrack == null) player.expanded = false }
     LaunchedEffect(Unit) { builds.pollLaunchFailures() }
     LaunchedEffect(messages.notice) { if (messages.notice != null) { delay(4000); messages.notice = null } }
@@ -197,6 +210,8 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                     profileName = profiles.profiles?.active?.name ?: "Профиль",
                     profileAvatar = profiles.profiles?.active?.avatar,
                     onOpenProfiles = { profiles.open = true },
+                    trackPosition = player::position,
+                    onSeek = player::seek,
                 )
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     if (navigation.readingNews) {

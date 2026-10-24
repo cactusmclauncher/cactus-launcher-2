@@ -321,18 +321,22 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
     }
     override suspend fun loadPreferences() = withContext(Dispatchers.IO) {
         preferencesStore.load()?.let {
+            menuMusicPack = it.menuMusicPack()
             com.cactuslauncher.model.LauncherPreferencesSnapshot(
                 it.setupComplete(), it.showPlayer(), it.parallelDownloads(), it.memoryGb(), it.automaticMemory(),
                 it.autoJavaOptimization(), it.ghostMode(), it.fullscreen(), it.autoUpdate(), it.advancedMode(),
                 it.translateModDescriptions(), it.modAntivirusEnabled(), it.resolution(), it.folder(), it.theme(),
+                it.launcherMusic(), it.menuMusicPack(), it.playerMode(), it.radioEnabled(),
             )
         }
     }
     override suspend fun savePreferences(value: com.cactuslauncher.model.LauncherPreferencesSnapshot) = withContext(Dispatchers.IO) {
+        menuMusicPack = value.menuMusicPack
         preferencesStore.save(LauncherPreferencesStore.Preferences(
             value.setupComplete, value.showPlayer, value.parallelDownloads, value.memoryGb, value.automaticMemory,
             value.autoJavaOptimization, value.ghostMode, value.fullscreen, value.autoUpdate, value.advancedMode,
             value.translateModDescriptions, value.modAntivirusEnabled, value.resolution, value.folder, value.theme,
+            value.launcherMusic, value.menuMusicPack, value.playerMode, value.radioEnabled,
         ))
     }
     override suspend fun checkLauncherUpdate() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
@@ -505,6 +509,9 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
             val profile = activeProfile()
             reserveLaunch(id)
             try {
+                // The game's title screen has its own music: fade the launcher's out and refresh the menu pack.
+                launcherMusic.stop(GAME_START_FADE_MILLIS)
+                syncMenuMusicPack(folder, build.version())
                 autoUpdateMods(build, folder)
                 val session = launchSession(authlibUrl)
                 val url = session?.apiRoot()
@@ -545,6 +552,7 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
             val profile = activeProfile()
             reserveLaunch(id)
             try {
+                launcherMusic.stop(GAME_START_FADE_MILLIS)
                 val session = launchSession(authlibUrl)
                 val url = session?.apiRoot()
                 val injector = if (session != null) AuthlibInjector(injectorRoot).ensure() else null
@@ -680,12 +688,68 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         else desktopMediaPlayer.control(command)
     }
 
+    override suspend fun seekTrack(positionSeconds: Int) = withContext(Dispatchers.IO) {
+        if (isMac()) macAudioMixer.seekTrack(positionSeconds)
+        else desktopMediaPlayer.seek(positionSeconds)
+    }
+
     override suspend fun currentTrack(): TrackSnapshot? = withContext(Dispatchers.IO) {
         if (isMac()) macAudioMixer.currentTrack() else desktopMediaPlayer.currentTrack()
     }
 
+    override suspend fun launcherTrack(): TrackSnapshot? = withContext(Dispatchers.IO) {
+        launcherMusic.currentTrack()?.let {
+            TrackSnapshot(it.title(), "C418", 0, 0, launcherMusic.isPlaying(), supported = false, canSeek = false, canSkip = true, canPause = true)
+        }
+    }
+
+    override suspend fun skipLauncherTrack(forward: Boolean) = withContext(Dispatchers.IO) {
+        if (forward) launcherMusic.next() else launcherMusic.previous()
+    }
+
+    override suspend fun setLauncherTrackPaused(paused: Boolean) = withContext(Dispatchers.IO) {
+        launcherMusic.setPaused(paused)
+    }
+
     override suspend fun setPlayerEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
         if (isMac()) macAudioMixer.setPlayerEnabled(enabled) else desktopMediaPlayer.setEnabled(enabled)
+    }
+
+    /** Launcher music: tracks from Minecraft's own assets (see C418Music), cached next to the other launcher caches. */
+    private val musicAssets = MusicAssets(ProfileStore.defaultFile().resolveSibling("cache").resolve("assets")) {
+        try { buildStore.load().map { buildStore.folder(it.id()).resolve("assets") } } catch (_: IOException) { emptyList() }
+    }
+    private val launcherMusic = LauncherMusic(musicAssets) { reportError("launcher-music", it) }
+    @Volatile private var menuMusicPack = true
+
+    override fun setLauncherMusic(enabled: Boolean) {
+        if (!enabled) { launcherMusic.stop(SWITCH_OFF_FADE_MILLIS); return }
+        // The game plays its own music; the launcher does not talk over it.
+        val gameRunning = synchronized(runningBuilds) { launchingBuilds.isNotEmpty() || runningBuilds.values.any { it.isAlive } }
+        if (!gameRunning) launcherMusic.play()
+    }
+
+    /** Called by the window when it closes. */
+    fun stopLauncherMusic() = launcherMusic.stop(0)
+
+    override suspend fun setMenuMusicPack(enabled: Boolean) {
+        menuMusicPack = enabled
+        withContext(Dispatchers.IO) {
+            for (build in buildStore.load()) {
+                val busy = synchronized(runningBuilds) { runningBuilds[build.id()]?.isAlive == true || build.id() in launchingBuilds }
+                if (!busy) syncMenuMusicPack(buildStore.folder(build.id()), build.version())
+            }
+        }
+    }
+
+    /** A broken pack or options.txt must never stop the game from starting: failures are only logged. */
+    private fun syncMenuMusicPack(folder: java.nio.file.Path, version: String) {
+        try { MenuMusicPack.sync(folder, version, menuMusicPack) } catch (e: Exception) { reportError("menu-music-pack", e) }
+    }
+
+    private companion object {
+        const val GAME_START_FADE_MILLIS = 2500L
+        const val SWITCH_OFF_FADE_MILLIS = 150L
     }
 
     private fun isLinux() = System.getProperty("os.name", "").lowercase().contains("linux")

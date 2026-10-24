@@ -12,6 +12,7 @@ internal class DesktopMediaPlayer {
     @Volatile private var enabled = true
     private var artworkUri: String? = null
     private var artwork: androidx.compose.ui.graphics.ImageBitmap? = null
+    private val mpris by lazy { LinuxMpris() }
 
     fun setEnabled(value: Boolean) {
         enabled = value
@@ -35,46 +36,30 @@ internal class DesktopMediaPlayer {
         }
     }
 
-    private fun linuxTrack(): TrackSnapshot? {
-        val tracks = linuxTracks()
-        return tracks.firstOrNull { it.second.isPlaying }?.second ?: tracks.firstOrNull()?.second
-    }
-
-    private fun linuxTracks(): List<Pair<String, TrackSnapshot>> {
-        val separator = "\u001f"
-        val format = listOf("{{playerName}}", "{{title}}", "{{artist}}", "{{position}}", "{{mpris:length}}", "{{status}}", "{{mpris:artUrl}}").joinToString(separator)
-        val result = run(listOf("playerctl", "--all-players", "metadata", "--format", format))
-        if (result.exitCode != 0) return emptyList()
-        return result.output.lineSequence().mapNotNull { line ->
-            val fields = line.split(separator)
-            if (fields.size < 7 || fields[1].isBlank()) return@mapNotNull null
-            val position = fields[3].toDoubleOrNull()?.toInt() ?: 0
-            val duration = fields[4].toLongOrNull()?.div(1_000_000L)?.toInt() ?: 0
-            fields[0] to TrackSnapshot(
-                title = fields[1].trim(),
-                artist = fields[2].trim(),
-                positionSeconds = position.coerceAtLeast(0),
-                durationSeconds = duration.coerceAtLeast(0),
-                isPlaying = fields[5].equals("Playing", true),
-                artwork = loadArtwork(fields[6]),
-            )
-        }.toList()
-    }
-
-    private fun linuxControl(command: TrackCommand) {
-        val sessions = linuxTracks()
-        val selected = sessions.firstOrNull { it.second.isPlaying } ?: sessions.firstOrNull()
-            ?: throw IOException("Не найден активный медиаплеер. Установите playerctl и проверьте поддержку MPRIS.")
-        val player = selected.first.takeIf { it.matches(Regex("[A-Za-z0-9_.-]+")) }
-            ?: throw IOException("Не удалось определить активный медиаплеер.")
-        val action = when (command) {
-            TrackCommand.PLAY_PAUSE -> "play-pause"
-            TrackCommand.NEXT -> "next"
-            TrackCommand.PREVIOUS -> "previous"
+    fun seek(positionSeconds: Int) {
+        if (!enabled) return
+        val seconds = positionSeconds.coerceAtLeast(0)
+        when {
+            isWindows() -> windowsSeek(seconds)
+            isLinux() -> mpris.seek(seconds * 1_000_000L)
+            else -> throw IOException("Перемотка на этой платформе недоступна.")
         }
-        val result = run(listOf("playerctl", "--player", player, action))
-        if (result.exitCode != 0) throw IOException(result.output.ifBlank { "Медиаплеер не принял команду." })
     }
+
+    private fun linuxTrack(): TrackSnapshot? {
+        val track = mpris.selected() ?: return null
+        return TrackSnapshot(
+            title = track.title,
+            artist = track.artist,
+            positionSeconds = (track.positionMicros / 1_000_000L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            durationSeconds = (track.lengthMicros / 1_000_000L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            isPlaying = track.isPlaying,
+            artwork = loadArtwork(track.artUrl),
+            canSeek = track.canSeek,
+        )
+    }
+
+    private fun linuxControl(command: TrackCommand) = mpris.control(command)
 
     private fun windowsTrack(): TrackSnapshot? {
         val script = """
@@ -94,6 +79,8 @@ internal class DesktopMediaPlayer {
             if (@@null -eq @@properties) { exit 0 }
             @@status = @@session.GetPlaybackInfo().PlaybackStatus.ToString()
             @@timeline = @@session.GetTimelineProperties()
+            @@canSeek = @@true
+            try { @@canSeek = [bool]@@session.GetPlaybackInfo().Controls.IsPlaybackPositionEnabled } catch {}
             @@title = [uri]::EscapeDataString([string]@@properties.Title)
             @@artist = [uri]::EscapeDataString([string](@@properties.Artist -join ', '))
             @@cover = ''
@@ -111,7 +98,7 @@ internal class DesktopMediaPlayer {
                 }
               }
             } catch {}
-            [Console]::WriteLine("@@title`t@@artist`t@@([int]@@timeline.Position.TotalSeconds)`t@@([int]@@timeline.EndTime.TotalSeconds)`t@@(@@status -eq 'Playing')`t@@cover")
+            [Console]::WriteLine("@@title`t@@artist`t@@([int]@@timeline.Position.TotalSeconds)`t@@([int]@@timeline.EndTime.TotalSeconds)`t@@(@@status -eq 'Playing')`t@@cover`t@@canSeek")
         """.trimIndent().replace("@@", '$'.toString())
         val result = run(powerShell(script))
         if (result.exitCode != 0) return null
@@ -126,6 +113,7 @@ internal class DesktopMediaPlayer {
             durationSeconds = fields[3].toIntOrNull()?.coerceAtLeast(0) ?: 0,
             isPlaying = fields[4].toBoolean(),
             artwork = fields.getOrNull(5)?.let(::loadEncodedArtwork),
+            canSeek = fields.getOrNull(6)?.let { it.equals("true", ignoreCase = true) } ?: true,
         )
     }
 
@@ -139,10 +127,23 @@ internal class DesktopMediaPlayer {
 
     private fun windowsControl(command: TrackCommand) {
         val operation = when (command) {
-            TrackCommand.PLAY_PAUSE -> "TryTogglePlayPauseAsync"
-            TrackCommand.NEXT -> "TrySkipNextAsync"
-            TrackCommand.PREVIOUS -> "TrySkipPreviousAsync"
+            TrackCommand.PLAY_PAUSE -> "TryTogglePlayPauseAsync()"
+            TrackCommand.NEXT -> "TrySkipNextAsync()"
+            TrackCommand.PREVIOUS -> "TrySkipPreviousAsync()"
         }
+        if (!windowsSessionCall(operation)) throw IOException("Windows не передала команду активному медиаплееру.")
+    }
+
+    /** GSMTC positions are TimeSpan ticks (100 ns). */
+    private fun windowsSeek(positionSeconds: Int) {
+        val ticks = positionSeconds.toLong() * 10_000_000L
+        if (!windowsSessionCall("TryChangePlaybackPositionAsync([long]$ticks)")) {
+            throw IOException("Медиаплеер не принял перемотку.")
+        }
+    }
+
+    /** Runs one Try*Async call on the current media session; true when the player accepted it. */
+    private fun windowsSessionCall(operation: String): Boolean {
         val script = """
             @@ErrorActionPreference = 'Stop'
             [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -156,11 +157,10 @@ internal class DesktopMediaPlayer {
             if (@@null -eq @@manager) { exit 2 }
             @@session = @@manager.GetCurrentSession()
             if (@@null -eq @@session) { exit 3 }
-            @@accepted = Wait-Operation (@@session.__MEDIA_OPERATION__())
+            @@accepted = Wait-Operation (@@session.__MEDIA_OPERATION__)
             if (-not @@accepted) { exit 4 }
         """.trimIndent().replace("@@", '$'.toString()).replace("__MEDIA_OPERATION__", operation)
-        val result = run(powerShell(script))
-        if (result.exitCode != 0) throw IOException("Windows не передала команду активному медиаплееру.")
+        return run(powerShell(script)).exitCode == 0
     }
 
     private fun powerShell(script: String): List<String> {
@@ -190,7 +190,7 @@ internal class DesktopMediaPlayer {
                 "file" -> java.nio.file.Path.of(uri).let { path ->
                     if (java.nio.file.Files.size(path) <= 4_000_000) java.nio.file.Files.readAllBytes(path) else null
                 }
-                "https" -> {
+                "http", "https" -> {
                     val connection = uri.toURL().openConnection() as java.net.HttpURLConnection
                     connection.connectTimeout = 1500
                     connection.readTimeout = 1500
