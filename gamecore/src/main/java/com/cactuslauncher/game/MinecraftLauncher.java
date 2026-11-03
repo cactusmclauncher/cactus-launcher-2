@@ -145,6 +145,7 @@ public final class MinecraftLauncher {
         if (info.has("arguments")) append(command, info.getAsJsonObject("arguments").getAsJsonArray("game"), values);
         else for (String argument : info.get("minecraftArguments").getAsString().split(" +")) command.add(expand(argument, values));
         command.addAll(extraGameArguments);
+        Files.deleteIfExists(root.resolve(".cactus-ghost-exit"));
         Files.createDirectories(root.resolve("logs"));
         Path launchLog = root.resolve("logs/cactus-launch.log");
         Files.newBufferedWriter(launchLog, StandardCharsets.UTF_8, StandardOpenOption.CREATE,

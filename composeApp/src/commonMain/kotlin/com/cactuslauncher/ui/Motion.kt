@@ -12,6 +12,13 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.runtime.remember
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -41,6 +48,23 @@ object CactusMotion {
     val easeOut = CubicBezierEasing(0.2f, 0f, 0f, 1f)
     const val quick = 110
     const val normal = 200
+    const val buttonPress = 75
+    const val buttonRelease = 120
+    const val buttonScale = 0.98f
+}
+
+@Composable
+internal fun rememberButtonPressScale(
+    source: MutableInteractionSource,
+    enabled: Boolean,
+): State<Float> {
+    val pressed by source.collectIsPressedAsState()
+    val durationScale = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
+    return animateFloatAsState(
+        if (enabled && pressed && durationScale > 0f) CactusMotion.buttonScale else 1f,
+        tween(if (pressed && enabled) CactusMotion.buttonPress else CactusMotion.buttonRelease, easing = CactusMotion.easeOut),
+        label = "button-press-scale",
+    )
 }
 
 /** Keep modal content alive during dismissal so exit animations can finish. */

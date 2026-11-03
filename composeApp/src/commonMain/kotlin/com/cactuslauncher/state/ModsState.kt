@@ -59,7 +59,8 @@ class ModsState(
     var catalogLoadingMore by mutableStateOf(false)
     var catalogMoreError by mutableStateOf<String?>(null)
     private var catalogGeneration by mutableIntStateOf(0)
-    val installQueue = mutableStateListOf<Pair<String, ModrinthProject>>()
+    private val installQueue = ArrayDeque<Pair<String, ModrinthProject>>()
+    private var installQueueRevision by mutableIntStateOf(0)
     val installErrors = mutableStateMapOf<String, String>()
     var activeInstall by mutableStateOf<Pair<String, ModrinthProject>?>(null)
     private var installWorkerRunning by mutableStateOf(false)
@@ -68,7 +69,12 @@ class ModsState(
     var updates by mutableStateOf<Map<String, ModUpdate>>(emptyMap())
     var updatesBuildId by mutableStateOf<String?>(null)
     var checkingUpdates by mutableStateOf(false)
-    /** Compatibility problems of [problemsBuildId]'s enabled mods (see GameService.modProblems). */
+    val installQueueSnapshot: List<Pair<String, ModrinthProject>>
+        get() {
+            installQueueRevision
+            return installQueue.toList()
+        }
+
     var problems by mutableStateOf<List<ModProblem>>(emptyList())
     var problemsBuildId by mutableStateOf<String?>(null)
     /** Modrinth projects for missing dependencies, by "buildId:slug"; looked up once per build and slug. */
@@ -132,13 +138,15 @@ class ModsState(
         if (activeInstall?.let { it.first == buildId && it.second.id == project.id } == true ||
             installQueue.any { it.first == buildId && it.second.id == project.id }) return
         installErrors.remove(key)
-        installQueue.add(buildId to project)
+        installQueue.addLast(buildId to project)
+        installQueueRevision++
         if (installWorkerRunning) return
         installWorkerRunning = true
         scope.launch {
             try {
                 while (installQueue.isNotEmpty()) {
-                    val (targetBuildId, nextProject) = installQueue.removeAt(0)
+                    val (targetBuildId, nextProject) = installQueue.removeFirst()
+                    installQueueRevision++
                     activeInstall = targetBuildId to nextProject
                     val requestKey = "$targetBuildId:${nextProject.id}"
                     try {

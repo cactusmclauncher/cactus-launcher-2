@@ -22,16 +22,22 @@ class LauncherSettings(gameDir: String) {
     var resolution by mutableStateOf("1920 × 1080")
     var folder by mutableStateOf(gameDir)
     var theme by mutableStateOf("system")
+    var seasonalTheme by mutableStateOf("auto")
     var launcherMusic by mutableStateOf(true)
     var menuMusicPack by mutableStateOf(true)
     var playerMode by mutableStateOf("external")
     var radioEnabled by mutableStateOf(false)
+    var ghostModeIntroSeen by mutableStateOf(false)
+
+    fun resolvedSeasonalTheme(automaticTheme: String): String =
+        if (seasonalTheme == "auto") automaticTheme else seasonalTheme
 
     fun snapshot(setupComplete: Boolean) = LauncherPreferencesSnapshot(
         setupComplete, showPlayer, parallelDownloads, memoryGb, automaticMemory,
         autoJavaOptimization, ghostMode, fullscreen, autoUpdate, advancedMode,
-        translateModDescriptions, modAntivirusEnabled, resolution, folder, theme,
-        launcherMusic, menuMusicPack, playerMode, radioEnabled,
+         translateModDescriptions, modAntivirusEnabled, resolution, folder, theme, seasonalTheme,
+
+        launcherMusic, menuMusicPack, playerMode, radioEnabled, ghostModeIntroSeen,
     )
 
     fun restore(value: LauncherPreferencesSnapshot) {
@@ -49,10 +55,12 @@ class LauncherSettings(gameDir: String) {
         resolution = value.resolution
         folder = value.folder
         theme = value.theme
+        seasonalTheme = value.seasonalTheme
         launcherMusic = value.launcherMusic
         menuMusicPack = value.menuMusicPack
         launcherModeRestore(value.playerMode, value.launcherMusic, value.radioEnabled)
         radioEnabled = value.radioEnabled
+        ghostModeIntroSeen = value.ghostModeIntroSeen
     }
 
     fun reset(gameDir: String) {
@@ -70,10 +78,17 @@ class LauncherSettings(gameDir: String) {
         resolution = "1920 × 1080"
         folder = gameDir
         theme = "system"
+        seasonalTheme = "auto"
         launcherMusic = true
         menuMusicPack = true
         playerMode = "external"
         radioEnabled = false
+        ghostModeIntroSeen = false
+    }
+
+    fun resetGhostMode() {
+        ghostMode = true
+        ghostModeIntroSeen = false
     }
 
     private fun launcherModeRestore(value: String, musicEnabled: Boolean, radioEnabled: Boolean) {

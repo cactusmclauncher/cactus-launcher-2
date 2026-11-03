@@ -30,7 +30,7 @@ fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (build != null) InstanceArtwork(build, Modifier.size(64.dp)) else BuildArtwork(name, C.green, Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    T(name, 22, C.text1, FontWeight.Bold, lineHeight = 27, maxLines = 1)
+                    T(name, 22, C.text1, FontWeight.SemiBold, lineHeight = 27, maxLines = 1)
                     T(when {
                         paused -> "Загрузка приостановлена"
                         !busy -> if (error == null) "Сборка скачана" else "Загрузка остановлена"
@@ -38,13 +38,13 @@ fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused
                         else -> progress.stage
                     }, 14, C.text2, lineHeight = 17, maxLines = 2)
                 }
-                Box(Modifier.size(44.dp).clip(CircleShape).background(C.fill).clickNoRipple(close), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(C.fill).buttonClickNoRipple(close), contentAlignment = Alignment.Center) {
                     T("✕", 14, C.text2, FontWeight.Medium, lineHeight = 17)
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    T("${(progress.fraction * 100).toInt()}%", 32, C.text1, FontWeight.Bold, lineHeight = 39)
+                    T("${(progress.fraction * 100).toInt()}%", 32, C.text1, FontWeight.SemiBold, lineHeight = 39)
                     val speed = (progress.bytesPerSecond / 104857.6).toInt() / 10.0
                     val remaining = progress.remainingSeconds
                     T(when {
@@ -77,10 +77,10 @@ fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused
             if (error != null) T(error, 13, C.danger, lineHeight = 18, maxLines = 2)
             Spacer(Modifier.weight(1f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.clip(CircleShape).background(C.fill).clickNoRipple(close).padding(horizontal = 24.dp, vertical = 12.dp)) {
+                Box(Modifier.clip(CircleShape).background(C.fill).buttonClickNoRipple(close).padding(horizontal = 24.dp, vertical = 12.dp)) {
                     T(if (busy) "Отмена" else "Закрыть", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                 }
-                if (busy || error != null) Box(Modifier.clip(CircleShape).background(C.accentFill).clickNoRipple(if (busy) onPause else onRetry).padding(horizontal = 24.dp, vertical = 12.dp)) {
+                if (busy || error != null) Box(Modifier.clip(CircleShape).background(C.accentFill).buttonClickNoRipple(if (busy) onPause else onRetry).padding(horizontal = 24.dp, vertical = 12.dp)) {
                     T(if (!busy) "Повторить" else if (paused) "Продолжить" else "Пауза", 15, C.onAccent, FontWeight.Medium, lineHeight = 18)
                 }
             }

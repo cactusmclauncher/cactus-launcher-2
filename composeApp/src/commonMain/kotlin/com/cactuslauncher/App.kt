@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,19 +43,25 @@ import com.cactuslauncher.state.PlayerState
 import com.cactuslauncher.state.PreferencesState
 import com.cactuslauncher.state.ProfilesState
 import com.cactuslauncher.state.ScreenshotsState
+import com.cactuslauncher.state.SecurityState
 import com.cactuslauncher.state.UpdatesState
 import com.cactuslauncher.theme.AppFontProvider
 import com.cactuslauncher.theme.C
 import com.cactuslauncher.ui.CactusMotion
+import com.cactuslauncher.ui.CrashHelperDialog
+import com.cactuslauncher.ui.GhostModeIntroDialog
 import com.cactuslauncher.ui.InitialSetupDialog
 import com.cactuslauncher.ui.ModHelperDialog
 import com.cactuslauncher.ui.MotionOverlay
 import com.cactuslauncher.ui.NewBuildDialog
 import com.cactuslauncher.ui.ProfilesDialog
+import com.cactuslauncher.ui.SecurityNoticeDialog
 import com.cactuslauncher.ui.SettingsDialog
 import com.cactuslauncher.ui.Sidebar
 import com.cactuslauncher.ui.T
+import com.cactuslauncher.ui.WinterBackground
 import com.cactuslauncher.ui.clickNoRipple
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.screens.OtherScreen
 import com.cactuslauncher.model.OtherSection
 import com.cactuslauncher.ui.screens.ServersSectionState
@@ -71,18 +78,22 @@ import com.cactuslauncher.ui.screens.NewsScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Root composable: wires the per-area state holders (package [com.cactuslauncher.state]) to screens and dialogs.
- * Effects stay here because their keys are Compose state; the work itself lives in the holders.
- */
 @Composable
-fun App(game: GameService, onGhostMode: () -> Unit) {
+fun App(game: GameService, onGhostMode: () -> Unit, onBringToFront: () -> Unit = {}) {
     val pageOffset = with(LocalDensity.current) { 6.dp.roundToPx() }
     val scope = rememberCoroutineScope()
     val messages = remember { AppMessages(game) }
     val navigation = remember { NavigationState() }
     val settings = remember { PreferencesState(game, messages) }
     val preferences = settings.preferences
+    var automaticSeasonalTheme by remember(game) { mutableStateOf(game.automaticSeasonalTheme()) }
+    val seasonalTheme = preferences.resolvedSeasonalTheme(automaticSeasonalTheme)
+    LaunchedEffect(game) {
+        while (true) {
+            delay(60 * 60 * 1000L)
+            automaticSeasonalTheme = game.automaticSeasonalTheme()
+        }
+    }
     val profiles = remember { ProfilesState(game, scope, messages) }
     val updates = remember { UpdatesState(game) }
     val builds = remember { BuildsState(game, scope, preferences, profiles, messages) }
@@ -91,13 +102,17 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
     val player = remember { PlayerState(game, scope, { preferences.showPlayer }) { preferences.playerMode == "launcher" } }
     val screenshots = remember { ScreenshotsState(game, scope, builds, messages) }
     val servers = remember { ServersState(game, scope, builds, messages) }
+    val security = remember { SecurityState(game, scope, messages) }
     val otherSection = navigation.otherSection
     var otherOverview by remember { mutableStateOf<com.cactuslauncher.model.OtherOverview?>(null) }
 
     LaunchedEffect(Unit) { profiles.operation { game.profiles() } }
     val systemDark = isSystemInDarkTheme()
     val darkTheme = when (preferences.theme) { "dark" -> true; "light" -> false; else -> systemDark }
-    SideEffect { C.dark = darkTheme }
+    SideEffect {
+        C.dark = darkTheme
+        C.seasonal = seasonalTheme
+    }
     LaunchedEffect(Unit) { settings.load() }
     LaunchedEffect(settings.settingsReady, settings.settingsLoadFailed, settings.preferencesError,
         preferences.snapshot(!settings.firstSetupOpen)) { settings.save() }
@@ -106,7 +121,11 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
     }
     LaunchedEffect(settings.settingsReady, preferences.automaticMemory) { settings.applyRecommendedMemory() }
 
+    LaunchedEffect(settings.settingsReady, settings.firstSetupOpen) {
+        if (settings.settingsReady && !settings.firstSetupOpen) security.check()
+    }
     LaunchedEffect(builds.selectedBuild?.id) { builds.loadResourcePacks(builds.selectedBuild?.id) }
+    LaunchedEffect(builds.selectedBuild?.id) { builds.loadSnapshots(builds.selectedBuild?.id) }
     LaunchedEffect(builds.selectedBuild?.id, builds.selectedBuild?.version, builds.selectedBuild?.loader,
         builds.selectedBuild?.let { builds.javaPlanRevisions[it.id] },
         preferences.memoryGb, preferences.automaticMemory, preferences.autoJavaOptimization) {
@@ -175,29 +194,65 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
     }
     LaunchedEffect(preferences.showPlayer, preferences.playerMode) { if (preferences.showPlayer) player.poll() }
     LaunchedEffect(player.currentTrack) { if (player.currentTrack == null) player.expanded = false }
-    LaunchedEffect(Unit) { builds.pollLaunchFailures() }
+    LaunchedEffect(builds.loaded) { if (builds.loaded) builds.pollLaunchFailures() }
+    LaunchedEffect(messages.launchFailure) {
+        val failure = messages.launchFailure ?: return@LaunchedEffect
+        onBringToFront()
+        logs.loadDiagnosis(failure.first)
+    }
     LaunchedEffect(messages.notice) { if (messages.notice != null) { delay(4000); messages.notice = null } }
     LaunchedEffect(messages.undoModUpdate) { if (messages.undoModUpdate != null) { delay(8000); messages.undoModUpdate = null } }
 
     val selectedInstalledMods = mods.selectedInstalledMods
-    val securityReportsByProject = selectedInstalledMods.mapNotNull { mod ->
-        mod.projectId.takeIf(String::isNotBlank)?.let { projectId ->
-            mods.securityReports["${mods.selectedBuildId}:${mod.fileName}"]?.let { projectId to it }
-        }
-    }.toMap()
-    val scanningSecurityProjects = selectedInstalledMods.filter {
-        "${mods.selectedBuildId}:${it.fileName}" in mods.scanningFiles
-    }.mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet()
+    val selectedBuildId = mods.selectedBuildId
+    val securityReportsByProject = remember(selectedInstalledMods, selectedBuildId, mods.securityReports) {
+        selectedInstalledMods.mapNotNull { mod ->
+            mod.projectId.takeIf(String::isNotBlank)?.let { projectId ->
+                mods.securityReports["$selectedBuildId:${mod.fileName}"]?.let { projectId to it }
+            }
+        }.toMap()
+    }
+    val scanningSecurityProjects = remember(selectedInstalledMods, selectedBuildId, mods.scanningFiles) {
+        selectedInstalledMods.filter {
+            "$selectedBuildId:${it.fileName}" in mods.scanningFiles
+        }.mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet()
+    }
+    val failedTranslationIds = remember(mods.failedTranslationIds) { mods.failedTranslationIds.toSet() }
+    val installedProjectIds = remember(selectedInstalledMods) {
+        selectedInstalledMods.mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet()
+    }
+    val installQueueSnapshot = mods.installQueueSnapshot
+    val queuedProjectIds = remember(installQueueSnapshot, selectedBuildId) {
+        installQueueSnapshot.filter { it.first == selectedBuildId }.map { it.second.id }
+    }
+    val queuePositions = remember(queuedProjectIds) {
+        queuedProjectIds.mapIndexed { index, projectId -> projectId to index + 1 }.toMap()
+    }
+    val installErrors = remember(mods.installErrors, selectedBuildId) {
+        mods.installErrors.filterKeys { it.startsWith("$selectedBuildId:") }
+            .mapKeys { it.key.substringAfter(':') }
+    }
+    val installQueueCount = remember(installQueueSnapshot, selectedBuildId, mods.activeInstall) {
+        installQueueSnapshot.count { it.first == selectedBuildId } +
+            if (mods.activeInstall?.first == selectedBuildId) 1 else 0
+    }
 
+    val winterBackground = settings.settingsReady && seasonalTheme == "winter"
     AppFontProvider {
-        Box(Modifier.fillMaxSize().background(C.window)) {
-            Row(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(C.window).clipToBounds()) {
+            if (winterBackground) {
+                WinterBackground(
+                    modifier = Modifier.fillMaxSize(),
+                    dark = darkTheme,
+                    animate = !navigation.settingsOpen && !profiles.open,
+                )
+            }
+            if (settings.settingsReady && !settings.firstSetupOpen) Row(Modifier.fillMaxSize()) {
                 Sidebar(
                     current = navigation.dest,
                     onSelect = { next ->
                         navigation.readingNews = false
                         navigation.dest = next
-                        // "Остальное" in the sidebar always leads to its menu, also from inside a section.
                         if (next == Dest.Other) { navigation.otherSection = null; screenshots.close() }
                         if (next == Dest.Builds) builds.selectedBuild = null
                     },
@@ -212,8 +267,9 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                     onOpenProfiles = { profiles.open = true },
                     trackPosition = player::position,
                     onSeek = player::seek,
+                    winterBackground = winterBackground,
                 )
-                Box(Modifier.weight(1f).fillMaxHeight()) {
+                Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                     if (navigation.readingNews) {
                         NewsReader(onBack = { navigation.readingNews = false }, beta = navigation.readingBeta)
                     } else {
@@ -227,7 +283,20 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                         }, label = "navigation",
                     ) { (route, buildDetail, logsId) ->
                         when (route) {
-                            Dest.Home -> HomeScreen(builds = builds.builds, onOpenBuild = { navigation.dest = Dest.Builds })
+                            Dest.Home -> HomeScreen(
+                                builds = builds.builds,
+                                onOpenBuilds = {
+                                    logs.buildId = null
+                                    builds.selectedBuild = null
+                                    navigation.dest = Dest.Builds
+                                },
+                                onOpenNews = { navigation.readingBeta = false; navigation.readingNews = true },
+                                onOpenBuild = { build ->
+                                    logs.buildId = null
+                                    builds.selectedBuild = build
+                                    navigation.dest = Dest.Builds
+                                },
+                            )
                             Dest.Builds -> if (buildDetail == null) BuildListScreen(
                                 builds = builds.builds,
                                 loading = !builds.loaded && builds.busy,
@@ -275,8 +344,20 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                                 onAutoUpdateMods = { enabled -> builds.operation({ game.setAutoUpdateMods(buildDetail.id, enabled) }) },
                                 lastModUpdate = mods.lastUpdate.takeIf { mods.lastUpdateBuildId == buildDetail.id },
                                 rollingBackMods = mods.actionId == ModsState.ROLLBACK,
-                                onRollbackMods = { mods.rollback(buildDetail.id) },
-                                error = builds.error,
+                                 onRollbackMods = { mods.rollback(buildDetail.id) },
+                                 snapshots = builds.snapshots.takeIf { builds.snapshotsBuildId == buildDetail.id }.orEmpty(),
+                                 snapshotsLoading = builds.snapshotsLoading && builds.snapshotsBuildId == buildDetail.id,
+                                 snapshotsBusy = builds.snapshotsBusy,
+                                 snapshotsError = builds.snapshotsError.takeIf { builds.snapshotsBuildId == buildDetail.id },
+                                 onCreateSnapshot = { builds.createSnapshot(buildDetail.id) },
+                                 onRestoreSnapshot = { id ->
+                                         if (id in builds.snapshots.map { it.id }) {
+                                             builds.restoreSnapshot(buildDetail.id, id)
+                                         }
+
+                                 },
+                                 error = builds.error,
+
                                 onRename = { name -> builds.operation({ game.renameBuild(buildDetail.id, name) }) },
                                 onDelete = { deleteFiles -> builds.operation({ game.deleteBuild(buildDetail.id, deleteFiles) }) },
                                 onOpenFolder = { builds.openFolder(buildDetail.id) },
@@ -297,21 +378,20 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                                 loadingCatalog = mods.catalogLoading,
                                 icons = mods.icons,
                                 translatedDescriptions = mods.translatedDescriptions,
-                                failedTranslationIds = mods.failedTranslationIds.toSet(),
+                                failedTranslationIds = failedTranslationIds,
                                 showTranslatedDescriptions = preferences.translateModDescriptions,
                                 hasMore = mods.catalogHasMore,
                                 loadingMore = mods.catalogLoadingMore,
                                 loadMoreError = mods.catalogMoreError,
-                                installedProjectIds = selectedInstalledMods.mapNotNull { it.projectId.takeIf(String::isNotBlank) }.toSet(),
+                                installedProjectIds = installedProjectIds,
                                 securityEnabled = preferences.modAntivirusEnabled,
                                 securityReportsByProject = securityReportsByProject,
                                 scanningSecurityProjects = scanningSecurityProjects,
-                                queuedProjectIds = mods.installQueue.filter { it.first == mods.selectedBuildId }.map { it.second.id },
+                                queuedProjectIds = queuedProjectIds,
                                 activeInstallProjectId = mods.activeInstall?.takeIf { it.first == mods.selectedBuildId }?.second?.id,
-                                installErrors = mods.installErrors.filterKeys { it.startsWith("${mods.selectedBuildId}:") }
-                                    .mapKeys { it.key.substringAfter(':') },
-                                installQueueCount = mods.installQueue.count { it.first == mods.selectedBuildId } +
-                                    if (mods.activeInstall?.first == mods.selectedBuildId) 1 else 0,
+                                installErrors = installErrors,
+                                queuePositions = queuePositions,
+                                installQueueCount = installQueueCount,
                                 onCatalogSelected = { mods.catalogActive = it },
                                 loadingBuilds = !builds.loaded && builds.busy,
                                 loadingMods = mods.loading,
@@ -434,6 +514,16 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                     },
                 )
             }
+            MotionOverlay(security.visible) {
+                security.threat?.let { threat ->
+                    SecurityNoticeDialog(
+                        threat = threat,
+                        busy = security.busy,
+                        onDismiss = { security.dismiss() },
+                        onUninstall = { security.uninstall() },
+                    )
+                }
+            }
             MotionOverlay(profiles.open) { ProfilesDialog(
                 snapshot = profiles.profiles, busy = profiles.busy, error = profiles.error,
                 onDismiss = { profiles.open = false },
@@ -458,6 +548,48 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                             mods.helperOpen = false
                             builds.selectedBuild = null
                             navigation.dest = Dest.Builds
+                        },
+                    )
+                }
+            }
+            MotionOverlay(builds.ghostModePrompt != null) {
+                GhostModeIntroDialog(
+                    onContinue = { builds.confirmGhostModeLaunch() },
+                    onCancel = { builds.cancelGhostModeLaunch() },
+                )
+            }
+            MotionOverlay(messages.launchFailure != null) {
+                messages.launchFailure?.let { (buildId, message) ->
+                    val failedBuild = builds.builds.find { it.id == buildId }
+                    CrashHelperDialog(
+                        build = failedBuild,
+                        message = message,
+                        diagnosis = logs.diagnosis,
+                        diagnosisLoading = logs.diagnosisLoading,
+                        recoveryBusy = logs.recoveryBusy,
+                        recoveryMessage = logs.recoveryMessage,
+                        canRollback = messages.launchFailureRollback,
+                        onTryRecovery = { modFile ->
+                            logs.tryRecovery(buildId, modFile, running = buildId in builds.runningBuildIds)
+                        },
+                        onRollback = {
+                            messages.launchFailure = null
+                            messages.launchFailureRollback = false
+                            mods.rollback(buildId)
+                        },
+                        onOpenLogs = {
+                            messages.launchFailure = null
+                            messages.launchFailureRollback = false
+                            if (failedBuild != null) {
+                                navigation.readingNews = false
+                                navigation.dest = Dest.Builds
+                                builds.selectedBuild = failedBuild
+                                logs.buildId = failedBuild.id
+                            }
+                        },
+                        onDismiss = {
+                            messages.launchFailure = null
+                            messages.launchFailureRollback = false
                         },
                     )
                 }
@@ -498,46 +630,21 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                     T(warning.message, 14, C.onToast, lineHeight = 20)
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         warning.install?.let { project ->
-                            T("Установить ${project.title}", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                            T("Установить ${project.title}", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple {
                                 messages.launchWarning = null
                                 mods.enqueueInstall(warning.buildId, project)
                                 messages.notice = "${project.title} добавлен в очередь установки."
                             })
                         }
-                        T("Всё равно запустить", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                        T("Всё равно запустить", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple {
                             messages.launchWarning = null
                             builds.builds.find { it.id == warning.buildId }?.let { builds.play(it, onGhostMode, checkMods = false, server = warning.server) }
                         })
-                        T("Отмена", 14, C.onToast, lineHeight = 18, modifier = Modifier.clickNoRipple { messages.launchWarning = null })
+                        T("Отмена", 14, C.onToast, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { messages.launchWarning = null })
                     }
                 }
             }
-            messages.launchFailure?.let { (buildId, message) ->
-                Column(
-                    Modifier.align(Alignment.BottomCenter).padding(24.dp).widthIn(max = 560.dp)
-                        .clip(RoundedCornerShape(12.dp)).background(C.toast).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    T(message, 14, C.onToast, lineHeight = 20)
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        if (messages.launchFailureRollback) T("Откатить обновление модов", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
-                            messages.launchFailure = null
-                            messages.launchFailureRollback = false
-                            mods.rollback(buildId)
-                        })
-                        builds.builds.find { it.id == buildId }?.let { build ->
-                            T("Открыть логи и диагностику", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
-                                messages.launchFailure = null
-                                navigation.readingNews = false
-                                navigation.dest = Dest.Builds
-                                builds.selectedBuild = build
-                                logs.buildId = build.id
-                            })
-                        }
-                        T("Закрыть", 14, C.onToast, lineHeight = 18, modifier = Modifier.clickNoRipple { messages.launchFailure = null })
-                    }
-                }
-            }
+
             if (messages.notice == null) messages.undoModUpdate?.let { (buildId, message) ->
                 Row(
                     Modifier.align(Alignment.BottomCenter).padding(24.dp).widthIn(max = 560.dp)
@@ -546,7 +653,7 @@ fun App(game: GameService, onGhostMode: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     T(message, 14, C.onToast, lineHeight = 20)
-                    T("Отменить", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple {
+                    T("Отменить", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple {
                         messages.undoModUpdate = null
                         mods.rollback(buildId)
                     })

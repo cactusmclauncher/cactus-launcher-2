@@ -10,6 +10,7 @@ import com.cactuslauncher.model.InstallProgress
 import com.cactuslauncher.model.InstalledResourcePack
 import com.cactuslauncher.model.JavaOptimizationPlan
 import com.cactuslauncher.model.LauncherBuild
+import com.cactuslauncher.model.BuildSnapshot
 import com.cactuslauncher.ui.LauncherSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,12 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+data class GhostModeLaunchPrompt(
+    val build: LauncherBuild,
+    val onGhostMode: () -> Unit,
+    val server: String?,
+)
 
 /** Builds list and detail: create/rename/delete, Java plan, resource packs, install and launch. */
 class BuildsState(
@@ -38,6 +45,11 @@ class BuildsState(
     var busy by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var loaded by mutableStateOf(false)
+    var snapshots by mutableStateOf<List<BuildSnapshot>>(emptyList())
+    var snapshotsBuildId by mutableStateOf<String?>(null)
+    var snapshotsLoading by mutableStateOf(false)
+    var snapshotsBusy by mutableStateOf(false)
+    var snapshotsError by mutableStateOf<String?>(null)
 
     var resourcePacks by mutableStateOf<List<InstalledResourcePack>>(emptyList())
     var resourcePacksLoading by mutableStateOf(false)
@@ -49,6 +61,7 @@ class BuildsState(
     var installPaused by mutableStateOf(false)
     var installError by mutableStateOf<String?>(null)
     private var installJob: Job? = null
+    var ghostModePrompt by mutableStateOf<GhostModeLaunchPrompt?>(null)
 
     fun bumpJavaPlan(id: String) {
         javaPlanRevisions[id] = (javaPlanRevisions[id] ?: 0) + 1
@@ -87,6 +100,51 @@ class BuildsState(
             messages.backgroundRecovered("refresh-builds")
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { messages.backgroundFailure("refresh-builds", "Не удалось обновить список сборок.", e) }
+    }
+
+    suspend fun loadSnapshots(id: String?) {
+        if (id == null) { snapshots = emptyList(); snapshotsBuildId = null; snapshotsError = null; return }
+        snapshotsBuildId = id
+        snapshotsLoading = true
+        snapshotsError = null
+        try {
+            val result = game.buildSnapshots(id)
+            if (snapshotsBuildId == id) snapshots = result
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { snapshotsError = e.message ?: "Не удалось прочитать точки восстановления." }
+        finally { if (snapshotsBuildId == id) snapshotsLoading = false }
+    }
+
+    fun createSnapshot(id: String) = snapshotOperation(id) { game.createBuildSnapshot(id, "Точка восстановления") }
+
+    fun restoreSnapshot(id: String, snapshotId: String) {
+        if (snapshotsBusy || id in runningBuildIds) return
+        snapshotsBusy = true
+        snapshotsError = null
+        scope.launch {
+            try {
+                game.restoreBuildSnapshot(id, snapshotId)
+                messages.notice = "Сборка восстановлена. Точка «Перед откатом» сохранена в истории."
+                loadSnapshots(id)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { snapshotsError = e.message ?: "Не удалось восстановить сборку." }
+            finally { snapshotsBusy = false }
+        }
+    }
+
+    private fun snapshotOperation(id: String, operation: suspend () -> BuildSnapshot) {
+        if (snapshotsBusy || id in runningBuildIds) return
+        snapshotsBusy = true
+        snapshotsError = null
+        scope.launch {
+            try {
+                operation()
+                loadSnapshots(id)
+                messages.notice = "Точка восстановления создана."
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { snapshotsError = e.message ?: "Не удалось создать точку восстановления." }
+            finally { snapshotsBusy = false }
+        }
     }
 
     suspend fun loadResourcePacks(id: String?) {
@@ -131,8 +189,10 @@ class BuildsState(
     suspend fun pollRunning() {
         while (currentCoroutineContext().isActive) {
             try {
-                runningBuildIds = game.runningBuildIds()
-                messages.backgroundRecovered("running-builds")
+                val next = game.runningBuildIds()
+                if (next != runningBuildIds) {
+                    runningBuildIds = next
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { messages.backgroundFailure("running-builds", "Не удалось проверить запущенные сборки.", e) }
             delay(1000)
@@ -204,8 +264,19 @@ class BuildsState(
      * With [checkMods], mods that would stop the game are reported first and the launch waits for confirmation.
      * [server] is an address from the build's server list to join right after start.
      */
+    fun confirmGhostModeLaunch() {
+        val prompt = ghostModePrompt ?: return
+        ghostModePrompt = null
+        preferences.ghostModeIntroSeen = true
+        play(prompt.build, prompt.onGhostMode, checkMods = false, server = prompt.server)
+    }
+
+    fun cancelGhostModeLaunch() {
+        ghostModePrompt = null
+    }
+
     fun play(build: LauncherBuild, onGhostMode: () -> Unit, checkMods: Boolean = true, server: String? = null) {
-        if (busy || build.id in runningBuildIds) return
+        if (busy || ghostModePrompt != null || build.id in runningBuildIds) return
         if (!build.installed) { startInstall(build); return }
         busy = true
         messages.launchWarning = null
@@ -218,6 +289,13 @@ class BuildsState(
                         messages.launchWarning = warning
                         return@launch
                     }
+                }
+                if (preferences.ghostMode && !preferences.ghostModeIntroSeen) {
+                    ghostModePrompt = GhostModeLaunchPrompt(build, onGhostMode, server)
+                    return@launch
+                }
+                if (preferences.ghostMode) {
+                    try { game.savePreferences(preferences.snapshot(true)) } catch (_: Exception) { }
                 }
                 val enteredGhostMode = game.launchBuild(
                     build.id, preferences.memoryGb, profiles.launchAuthServer,
@@ -233,6 +311,9 @@ class BuildsState(
                 refresh()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
+                messages.launchFailureRollback = try {
+                    game.lastModUpdate(build.id)?.confirmed == false
+                } catch (ce: CancellationException) { throw ce } catch (err: Exception) { game.reportError("mod-backups", err); false }
                 messages.launchFailure = build.id to (e.message ?: "Не удалось запустить Minecraft.")
                 refresh()
             }

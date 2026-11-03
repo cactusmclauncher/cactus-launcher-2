@@ -68,9 +68,9 @@ fun Sidebar(
     profileName: String,
     onOpenProfiles: () -> Unit,
     profileAvatar: androidx.compose.ui.graphics.ImageBitmap? = null,
-    /** Live position in seconds; advances between polls while the track plays. */
     trackPosition: () -> Double = { currentTrack?.positionSeconds?.toDouble() ?: 0.0 },
     onSeek: (Int) -> Unit = {},
+    winterBackground: Boolean = false,
 ) {
     val paneWidth by animateDpAsState(if (playerExpanded) 340.dp else 240.dp, tween(220, easing = CactusMotion.easeOut), label = "player-pane")
     Column(
@@ -78,7 +78,7 @@ fun Sidebar(
             .width(paneWidth)
             .fillMaxHeight()
             .animateContentSize(tween(200, easing = CactusMotion.easeOut))
-            .background(C.sidebar)
+            .background(if (winterBackground) Color.Transparent else C.sidebar)
             .then(if (playerExpanded) Modifier.clickNoRipple(onTogglePlayer) else Modifier)
             .then(if (playerExpanded) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(20.dp),
@@ -185,7 +185,7 @@ private fun PlayerPopup(
         Modifier
             .fillMaxWidth()
             .animateContentSize(tween(200, easing = CactusMotion.easeOut))
-            .softShadow(RoundedCornerShape(16.dp), elevation = 16.dp, color = Color(0x26000000))
+            .softShadow(RoundedCornerShape(16.dp), elevation = 8.dp, color = Color(0x16000000))
             .clip(RoundedCornerShape(16.dp))
             .background(C.elevated)
             .clickNoRipple {}
@@ -193,7 +193,7 @@ private fun PlayerPopup(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            T("Плеер", 13, C.text1, FontWeight.SemiBold, lineHeight = 16, modifier = Modifier.clickNoRipple(onClose))
+            T("Плеер", 13, C.text1, FontWeight.SemiBold, lineHeight = 16, modifier = Modifier.buttonClickNoRipple(onClose))
             T("Треки", 12, C.text2, lineHeight = 15)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -323,7 +323,7 @@ private fun formatTrackTime(seconds: Int): String = "${seconds / 60}:${(seconds 
 private fun RowScope.TrackButton(label: String, description: String, onClick: () -> Unit) {
     Box(
         Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(8.dp)).background(C.fill)
-            .clickNoRipple(onClick).semantics { contentDescription = description },
+            .buttonClickNoRipple(onClick).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { T(label, 13, C.text1, FontWeight.Medium, lineHeight = 16) }
 }

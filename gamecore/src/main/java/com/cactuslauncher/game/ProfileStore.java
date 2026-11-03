@@ -111,7 +111,7 @@ public final class ProfileStore {
     private static String validate(String name, List<Profile> profiles, String excluded) {
         String value = name.trim();
         if (!value.matches("[A-Za-z0-9_]{3,16}"))
-            throw new IllegalArgumentException("Имя: 3–16 символов, латинские буквы, цифры и подчёркивание.");
+            throw new IllegalArgumentException("Имя: 3-16 символов, латинские буквы, цифры и подчёркивание.");
         if (profiles.stream().anyMatch(it -> !it.id().equals(excluded) && it.name().equalsIgnoreCase(value)))
             throw new IllegalArgumentException("Профиль с таким именем уже существует.");
         return value;

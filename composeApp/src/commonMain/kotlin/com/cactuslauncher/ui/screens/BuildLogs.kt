@@ -34,7 +34,7 @@ import com.cactuslauncher.ui.AnimatedSegments
 import com.cactuslauncher.ui.InstanceArtwork
 import com.cactuslauncher.ui.SearchBox
 import com.cactuslauncher.ui.T
-import com.cactuslauncher.ui.clickNoRipple
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.softShadow
 
 @Composable
@@ -73,13 +73,13 @@ fun BuildLogsScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 InstanceArtwork(build, Modifier.size(56.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    T("Логи", 28, C.text1, FontWeight.Bold, lineHeight = 34)
+                    T("Логи", 28, C.text1, FontWeight.SemiBold, lineHeight = 34)
                     T("${build.name}, последний запуск ${build.lastPlayed}", 15, C.text2, lineHeight = 18)
                 }
             }
             Box(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill)
-                    .clickNoRipple(onBack).padding(horizontal = 20.dp, vertical = 10.dp),
+                    .buttonClickNoRipple(onBack).padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
                 T("Назад к сборке", 14, C.text1, FontWeight.Medium, lineHeight = 17)
             }
@@ -105,7 +105,7 @@ fun BuildLogsScreen(
                             Box(
                                 Modifier.clip(RoundedCornerShape(999.dp)).background(if (result.recoverable && !recoveryBusy) C.accentFill else C.fill)
                                     .padding(horizontal = 16.dp, vertical = 9.dp)
-                                    .then(if (result.recoverable && !recoveryBusy) Modifier.clickNoRipple { onTryRecovery(mod) } else Modifier),
+                                    .then(if (result.recoverable && !recoveryBusy) Modifier.buttonClickNoRipple { onTryRecovery(mod) } else Modifier),
                             ) {
                                 T(if (recoveryBusy) "Запускаю…" else "Проверить без мода", 13, if (result.recoverable && !recoveryBusy) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 16)
                             }
@@ -144,10 +144,10 @@ fun BuildLogsScreen(
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            T("Открыть файл логов", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple(onOpenFile))
+            T("Открыть файл логов", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple(onOpenFile))
             Box(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(if (lines.isEmpty()) C.fill else C.accentFill)
-                    .then(if (lines.isEmpty()) Modifier else Modifier.clickNoRipple {
+                    .then(if (lines.isEmpty()) Modifier else Modifier.buttonClickNoRipple {
                         clipboard.setText(AnnotatedString(lines.joinToString("\n")))
                         copied = true
                     })

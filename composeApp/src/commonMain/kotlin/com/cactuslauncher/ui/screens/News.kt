@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.cactuslauncher.theme.C
 import com.cactuslauncher.ui.T
 import com.cactuslauncher.ui.clickNoRipple
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.softShadow
 import com.cactuslauncher.ui.BannerArtwork
 import com.cactuslauncher.ui.SearchBox
@@ -38,7 +39,7 @@ private val BETA_WHATS_NEW = listOf(
     "- нормальная проверка конфликтов модов",
 )
 
-private const val BETA_TITLE = "Бета-версия Cactus Launcher 2.0."
+private const val BETA_TITLE = "Бета-версия Cactus Launcher 2.0"
 private const val BETA_LEDE = "Один jar для Windows, macOS и Linux. Нужна Java 21, запуск: java -jar CactusLauncher-2.0-beta.jar."
 private const val BETA_MACOS_NOTE = "Звуковой микшер и «Сейчас играет» на macOS пока работают только на Apple Silicon."
 
@@ -54,7 +55,7 @@ fun NewsScreen(onOpenArticle: () -> Unit, onOpenBeta: () -> Unit = onOpenArticle
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            T("Новости", 32, C.text1, FontWeight.Bold, lineHeight = 39)
+            T("Новости", 32, C.text1, FontWeight.SemiBold, lineHeight = 39)
             SearchBox(query, { query = it }, "Поиск новостей", Modifier.width(280.dp), elevated = true, fill = C.surface)
         }
 
@@ -74,7 +75,7 @@ fun NewsScreen(onOpenArticle: () -> Unit, onOpenBeta: () -> Unit = onOpenArticle
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 T("Обновление 1.21.11", 13, C.bannerEyebrow, lineHeight = 16)
-                T("Mounts of Mayhem", 40, Color.White, FontWeight.Bold, lineHeight = 48)
+                T("Mounts of Mayhem", 40, Color.White, FontWeight.SemiBold, lineHeight = 48)
                 T(
                     "Копья, наутилусы и зомби-всадники.",
                     15,
@@ -105,8 +106,8 @@ private fun BetaNewsCard(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        T("2.0 BETA", 12, C.accent, FontWeight.SemiBold, lineHeight = 15)
-        T(BETA_TITLE, 20, C.text1, FontWeight.Bold, lineHeight = 25)
+        T("Бета 2.0", 12, C.accent, FontWeight.Medium, lineHeight = 15)
+        T(BETA_TITLE, 20, C.text1, FontWeight.SemiBold, lineHeight = 25)
         T(BETA_LEDE, 14, C.text2, lineHeight = 20)
         T("Что нового:", 15, C.text1, FontWeight.SemiBold, lineHeight = 20)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -120,7 +121,7 @@ private fun BetaNewsCard(
 
 @Composable
 fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
-    Column(Modifier.fillMaxSize().background(C.readerBg)) {
+    Column(Modifier.fillMaxSize().background(if (C.seasonal == "winter") C.window.copy(alpha = 0.35f) else C.readerBg)) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -131,7 +132,7 @@ fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
-                Modifier.clickNoRipple(onBack),
+                Modifier.buttonClickNoRipple(onBack),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -145,7 +146,9 @@ fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(
-                Modifier.width(720.dp),
+                Modifier.width(720.dp)
+                    .background(if (C.seasonal == "winter") C.readerBg.copy(alpha = 0.94f) else Color.Transparent, RoundedCornerShape(16.dp))
+                    .padding(if (C.seasonal == "winter") 24.dp else 0.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -155,9 +158,9 @@ fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
                             .background(C.readerGreenTag)
                             .padding(horizontal = 12.dp, vertical = 5.dp),
                     ) {
-                        T(if (beta) "2.0 BETA" else "ОБНОВЛЕНИЕ 1.21.11", 12, C.readerGreenTagText, FontWeight.SemiBold, lineHeight = 15)
+                        T(if (beta) "Бета 2.0" else "Обновление 1.21.11", 12, C.readerGreenTagText, FontWeight.Medium, lineHeight = 15)
                     }
-                    T(if (beta) BETA_TITLE else "Mounts of Mayhem", 40, C.readerInk, FontWeight.Bold, lineHeight = 48)
+                    T(if (beta) BETA_TITLE else "Mounts of Mayhem", 40, C.readerInk, FontWeight.SemiBold, lineHeight = 48)
                     T(
                         if (beta) BETA_LEDE else "Копья, наутилусы и зомби-всадники: коротко о том, что появилось в игре.",
                         19,
@@ -168,7 +171,7 @@ fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
                 }
                 if (beta) {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        T("Что нового:", 24, C.readerInk, FontWeight.Bold, lineHeight = 30)
+                        T("Что нового:", 24, C.readerInk, FontWeight.SemiBold, lineHeight = 30)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             BETA_WHATS_NEW.forEach { item ->
                                 T(item, 17, C.readerBody, lineHeight = 24)
@@ -179,7 +182,7 @@ fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
                 } else {
                     BannerArtwork(Modifier.fillMaxWidth().height(320.dp).clip(RoundedCornerShape(24.dp)))
                     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                        T("Что нового", 26, C.readerInk, FontWeight.Bold, lineHeight = 31)
+                        T("Что нового", 26, C.readerInk, FontWeight.SemiBold, lineHeight = 31)
                         T(
                             "Главная новинка: копьё. Его урон зависит от точности и скорости, так что сильнее всего оно бьёт с разгона верхом.",
                             17,
@@ -200,7 +203,7 @@ fun NewsReader(onBack: () -> Unit, beta: Boolean = false) {
                                 .padding(24.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            T("СОВЕТ", 12, C.readerGreen, FontWeight.SemiBold, lineHeight = 15)
+                            T("Совет", 12, C.readerGreen, FontWeight.Medium, lineHeight = 15)
                             T(
                                 "Перед обновлением сделайте копию мира, чтобы было куда откатиться.",
                                 15,

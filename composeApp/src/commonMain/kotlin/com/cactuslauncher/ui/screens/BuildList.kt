@@ -37,10 +37,10 @@ fun BuildListScreen(
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                T("Сборки", 32, C.text1, FontWeight.Bold, lineHeight = 39)
+                T("Сборки", 32, C.text1, FontWeight.SemiBold, lineHeight = 39)
                 T("У каждой своя версия, моды и настройки", 14, C.text2, lineHeight = 20)
             }
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill).clickNoRipple(onCreate).padding(horizontal = 24.dp, vertical = 12.dp)) {
+            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill).buttonClickNoRipple(onCreate).padding(horizontal = 24.dp, vertical = 12.dp)) {
                 T("+ Создать сборку", 15, C.onAccent, FontWeight.Medium, lineHeight = 18)
             }
         }
@@ -50,13 +50,13 @@ fun BuildListScreen(
             T("Загрузка сборок…", 15, C.text2, lineHeight = 20)
         } else if (error != null) {
             T(error, 14, C.danger, lineHeight = 20)
-            T("Повторить", 15, C.accent, lineHeight = 18, modifier = Modifier.clickNoRipple(onRetry))
+            T("Повторить", 15, C.accent, lineHeight = 18, modifier = Modifier.buttonClickNoRipple(onRetry))
         } else if (visible.isEmpty()) {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.surface).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 T(if (builds.isEmpty()) "Пока нет сборок" else "Сборки не найдены", 20, C.text1, FontWeight.Medium, lineHeight = 24)
                 T(if (builds.isEmpty()) "Создайте первую сборку и выберите версию Minecraft." else "Попробуйте другое название или очистите поиск.", 14, C.text2, lineHeight = 20)
                 T(if (builds.isEmpty()) "Создать сборку" else "Очистить поиск", 15, C.accent, FontWeight.Medium, lineHeight = 18,
-                    modifier = Modifier.clickNoRipple { if (builds.isEmpty()) onCreate() else query = "" })
+                    modifier = Modifier.buttonClickNoRipple { if (builds.isEmpty()) onCreate() else query = "" })
             }
         }
         visible.forEach { build ->
@@ -76,11 +76,11 @@ fun BuildListScreen(
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val running = build.id in runningBuildIds
                     Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if (build.installed || running) C.fill else C.accentFill)
-                        .then(if (running) Modifier else Modifier.clickNoRipple { onPlay(build) })
+                        .buttonClickNoRipple(enabled = !running) { onPlay(build) }
                         .padding(horizontal = 24.dp, vertical = 10.dp)) {
                         T(if (running) "Игра запущена" else if (build.installed) "Играть" else "Скачать", 14, if (build.installed || running) C.text2 else C.onAccent, FontWeight.Medium, lineHeight = 18)
                     }
-                    T("Настроить →", 13, C.accent, FontWeight.Medium, lineHeight = 16, modifier = Modifier.clickNoRipple { onOpen(build) })
+                    T("Настроить →", 13, C.accent, FontWeight.Medium, lineHeight = 16, modifier = Modifier.buttonClickNoRipple { onOpen(build) })
                 }
             }
         }

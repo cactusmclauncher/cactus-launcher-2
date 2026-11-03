@@ -25,20 +25,33 @@ public final class LauncherPreferencesStore {
             String resolution,
             String folder,
             String theme,
+            String seasonalTheme,
             boolean launcherMusic,
             boolean menuMusicPack,
             String playerMode,
-            boolean radioEnabled) {
+            boolean radioEnabled,
+            boolean ghostModeIntroSeen) {
         /** Settings without the music switches (both on). */
         public Preferences(boolean setupComplete, boolean showPlayer, int parallelDownloads, int memoryGb, boolean automaticMemory,
                            boolean autoJavaOptimization, boolean ghostMode, boolean fullscreen, boolean autoUpdate, boolean advancedMode,
-                           boolean translateModDescriptions, boolean modAntivirusEnabled, String resolution, String folder, String theme) {
+                           boolean translateModDescriptions, boolean modAntivirusEnabled, String resolution, String folder, String theme,
+                           String seasonalTheme) {
             this(setupComplete, showPlayer, parallelDownloads, memoryGb, automaticMemory, autoJavaOptimization, ghostMode, fullscreen,
-                    autoUpdate, advancedMode, translateModDescriptions, modAntivirusEnabled, resolution, folder, theme, true, true, "external", false);
+                     autoUpdate, advancedMode, translateModDescriptions, modAntivirusEnabled, resolution, folder, theme, seasonalTheme, true, true, "external", false, false);
+        }
+        public Preferences(boolean setupComplete, boolean showPlayer, int parallelDownloads, int memoryGb, boolean automaticMemory,
+                           boolean autoJavaOptimization, boolean ghostMode, boolean fullscreen, boolean autoUpdate, boolean advancedMode,
+                            boolean translateModDescriptions, boolean modAntivirusEnabled, String resolution, String folder, String theme,
+                            String seasonalTheme, boolean launcherMusic, boolean menuMusicPack, String playerMode, boolean radioEnabled) {
+            this(setupComplete, showPlayer, parallelDownloads, memoryGb, automaticMemory, autoJavaOptimization, ghostMode, fullscreen,
+                     autoUpdate, advancedMode, translateModDescriptions, modAntivirusEnabled, resolution, folder, theme,
+                     seasonalTheme, launcherMusic, menuMusicPack, playerMode, radioEnabled, false);
+
         }
     }
 
     public static final java.util.List<String> THEMES = java.util.List.of("system", "light", "dark");
+    public static final java.util.List<String> SEASONAL_THEMES = java.util.List.of("auto", "off", "winter");
 
     private final Path file;
 
@@ -58,8 +71,11 @@ public final class LauncherPreferencesStore {
             int memory = Integer.parseInt(values.getProperty("memoryGb"));
             String resolution = required(values, "resolution");
             String folder = required(values, "folder");
-            String theme = values.getProperty("theme", "system");
-            if (!THEMES.contains(theme)) theme = "system";
+             String theme = values.getProperty("theme", "system");
+             if (!THEMES.contains(theme)) theme = "system";
+             String seasonalTheme = values.getProperty("seasonalTheme", "auto");
+             if (!SEASONAL_THEMES.contains(seasonalTheme)) seasonalTheme = "off";
+
             if (downloads < 1 || downloads > 16 || memory < 2 || memory > 16
                     || !java.util.List.of("1280 × 720", "1600 × 900", "1920 × 1080", "2560 × 1440").contains(resolution))
                 throw new IllegalArgumentException();
@@ -68,10 +84,12 @@ public final class LauncherPreferencesStore {
                     bool(values, "automaticMemory"), bool(values, "autoJavaOptimization"),
                     bool(values, "ghostMode"), bool(values, "fullscreen"), optionalBool(values, "autoUpdate", true),
                     optionalBool(values, "advancedMode", false),
-                    bool(values, "translateModDescriptions"), bool(values, "modAntivirusEnabled"), resolution, folder, theme,
+                     bool(values, "translateModDescriptions"), bool(values, "modAntivirusEnabled"), resolution, folder, theme, seasonalTheme,
+
                     optionalBool(values, "launcherMusic", true), optionalBool(values, "menuMusicPack", true),
                     optionalEnum(values, "playerMode", "external", java.util.List.of("external", "launcher")),
-                    optionalBool(values, "radioEnabled", false));
+                    optionalBool(values, "radioEnabled", false),
+                    optionalBool(values, "ghostModeIntroSeen", false));
         } catch (RuntimeException e) {
             throw new IOException("Файл настроек повреждён. Исходный файл сохранён.", e);
         }
@@ -80,8 +98,9 @@ public final class LauncherPreferencesStore {
     public synchronized void save(Preferences value) throws IOException {
         if (value == null || value.parallelDownloads() < 1 || value.parallelDownloads() > 16
                 || value.memoryGb() < 2 || value.memoryGb() > 16 || value.folder() == null || value.folder().isBlank()
-                || !java.util.List.of("1280 × 720", "1600 × 900", "1920 × 1080", "2560 × 1440").contains(value.resolution())
-                || !THEMES.contains(value.theme()) || !java.util.List.of("external", "launcher").contains(value.playerMode()))
+                 || !java.util.List.of("1280 × 720", "1600 × 900", "1920 × 1080", "2560 × 1440").contains(value.resolution())
+                 || !THEMES.contains(value.theme()) || !SEASONAL_THEMES.contains(value.seasonalTheme()) || !java.util.List.of("external", "launcher").contains(value.playerMode()))
+
             throw new IOException("Настройки лаунчера содержат недопустимые значения.");
         if (Files.isSymbolicLink(file)) throw new IOException("Файл настроек не должен быть символической ссылкой.");
         Files.createDirectories(file.getParent());
@@ -101,11 +120,14 @@ public final class LauncherPreferencesStore {
         values.setProperty("modAntivirusEnabled", Boolean.toString(value.modAntivirusEnabled()));
         values.setProperty("resolution", value.resolution());
         values.setProperty("folder", value.folder());
-        values.setProperty("theme", value.theme());
+         values.setProperty("theme", value.theme());
+         values.setProperty("seasonalTheme", value.seasonalTheme());
+
         values.setProperty("launcherMusic", Boolean.toString(value.launcherMusic()));
         values.setProperty("menuMusicPack", Boolean.toString(value.menuMusicPack()));
         values.setProperty("playerMode", value.playerMode());
         values.setProperty("radioEnabled", Boolean.toString(value.radioEnabled()));
+        values.setProperty("ghostModeIntroSeen", Boolean.toString(value.ghostModeIntroSeen()));
         Path temp = file.resolveSibling(file.getFileName() + ".tmp-" + UUID.randomUUID());
         try {
             try (var output = Files.newOutputStream(temp)) { values.store(output, null); }

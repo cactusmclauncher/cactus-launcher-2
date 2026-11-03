@@ -6,6 +6,7 @@ import com.cactuslauncher.model.LauncherUpdate
 
 /** Everything the UI needs from the game core; implemented by GameServiceImpl. */
 interface GameService {
+    fun automaticSeasonalTheme(): String = "off"
     suspend fun installBuild(id: String, parallelDownloads: Int, onProgress: (com.cactuslauncher.model.InstallProgress) -> Unit)
     fun pauseInstallation(paused: Boolean)
     /** [authlibUrl]: the third-party auth server the user signed in to, or null for an offline profile. */
@@ -32,6 +33,9 @@ interface GameService {
     suspend fun renameBuild(id: String, name: String): List<com.cactuslauncher.model.LauncherBuild>
     suspend fun setBuildIcon(id: String, icon: String): List<com.cactuslauncher.model.LauncherBuild>
     suspend fun setAutoUpdateMods(id: String, enabled: Boolean): List<com.cactuslauncher.model.LauncherBuild>
+    suspend fun buildSnapshots(id: String): List<com.cactuslauncher.model.BuildSnapshot>
+    suspend fun createBuildSnapshot(id: String, label: String): com.cactuslauncher.model.BuildSnapshot
+    suspend fun restoreBuildSnapshot(id: String, snapshotId: String)
     /** Updates available on Modrinth for the build's mods (its loader and Minecraft version). */
     suspend fun modUpdates(id: String): List<com.cactuslauncher.model.ModUpdate>
     /** Installs updates of [fileNames] (null: all) with their new required dependencies; replaced jars are backed up. */
@@ -80,6 +84,10 @@ interface GameService {
     suspend fun importResourcePack(id: String): Boolean
     suspend fun setResourcePackEnabled(id: String, fileName: String, enabled: Boolean)
     suspend fun openResourcePacksFolder(id: String)
+    /** A known security product that is running or installed and may conflict with the launcher, or null. */
+    suspend fun detectConflictingSoftware(): com.cactuslauncher.model.ConflictingSoftware?
+    /** Runs the vendor's official uninstaller after the user consented; returns false when it cannot be started. */
+    suspend fun uninstallConflictingSoftware(): Boolean
     suspend fun loadPreferences(): com.cactuslauncher.model.LauncherPreferencesSnapshot?
     suspend fun savePreferences(value: com.cactuslauncher.model.LauncherPreferencesSnapshot)
     suspend fun checkLauncherUpdate(): LauncherUpdate

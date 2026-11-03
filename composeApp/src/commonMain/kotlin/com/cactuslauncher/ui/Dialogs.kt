@@ -85,6 +85,7 @@ fun Modal(
     compact: Boolean = false,
     height: androidx.compose.ui.unit.Dp = if (compact) 460.dp else 640.dp,
     width: androidx.compose.ui.unit.Dp = 560.dp,
+    wrapHeight: Boolean = false,
     onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { false },
     content: @Composable () -> Unit,
 ) {
@@ -107,13 +108,13 @@ fun Modal(
                 .then(if (width <= 560.dp) Modifier.width(width) else Modifier.padding(horizontal = 32.dp).widthIn(max = width).fillMaxWidth())
                 .padding(vertical = 16.dp)
                 .heightIn(max = height)
-                .fillMaxHeight()
+                .then(if (wrapHeight) Modifier else Modifier.fillMaxHeight())
                 .graphicsLayer {
                     scaleX = 0.985f + entrance.value * 0.015f
                     scaleY = scaleX
                     translationY = (1f - entrance.value) * 8.dp.toPx()
                 }
-                .softShadow(RoundedCornerShape(24.dp), elevation = 32.dp, color = Color(0x33000000))
+                .softShadow(RoundedCornerShape(24.dp), elevation = 24.dp, color = Color(0x26000000))
                 .clip(RoundedCornerShape(24.dp))
                 .background(C.surface)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
@@ -158,7 +159,7 @@ fun NewBuildDialog(game: GameService, busy: Boolean = false, saveError: String? 
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    T("Новая сборка", 24, C.text1, FontWeight.Bold, lineHeight = 29)
+                    T("Новая сборка", 24, C.text1, FontWeight.SemiBold, lineHeight = 29)
                     T(
                         "Выберите версию и загрузчик. Настройки можно изменить позже.",
                         15,
@@ -177,7 +178,7 @@ fun NewBuildDialog(game: GameService, busy: Boolean = false, saveError: String? 
                             .height(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(C.input)
-                            .clickNoRipple { versionsOpen = true }
+                            .buttonClickNoRipple { versionsOpen = true }
                             .padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -191,14 +192,14 @@ fun NewBuildDialog(game: GameService, busy: Boolean = false, saveError: String? 
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 VersionFilter.entries.forEach { value ->
                                     T(value.label, 13, if (filter == value) C.accent else C.text2, lineHeight = 16,
-                                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (filter == value) C.accentSoft else C.fill).clickNoRipple { filter = value }.padding(10.dp))
+                                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (filter == value) C.accentSoft else C.fill).buttonClickNoRipple { filter = value }.padding(10.dp))
                                 }
                             }
                             when {
                                 loading -> T("Загрузка каталога Mojang…", 14, C.text2, lineHeight = 18)
                                 error != null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     T(error.orEmpty(), 14, C.text2, lineHeight = 18)
-                                    T("Повторить", 14, C.accent, lineHeight = 18, modifier = Modifier.clickNoRipple { attempt++ })
+                                    T("Повторить", 14, C.accent, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { attempt++ })
                                 }
                                 filteredVersions.isEmpty() -> T("Версии не найдены", 14, C.text2, lineHeight = 18)
                                 else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -228,7 +229,7 @@ fun NewBuildDialog(game: GameService, busy: Boolean = false, saveError: String? 
                         Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(C.fill)
-                            .clickNoRipple(onDismiss)
+                            .buttonClickNoRipple(onDismiss)
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                     ) {
                         T("Отмена", 15, C.text1, FontWeight.Medium, lineHeight = 18)
@@ -237,7 +238,7 @@ fun NewBuildDialog(game: GameService, busy: Boolean = false, saveError: String? 
                         Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(if (version != null && name.isNotBlank()) C.accentFill else C.fill)
-                            .clickNoRipple { version?.let { if (!busy && name.isNotBlank()) onCreate(name.trim(), it.id, listOf("Vanilla", "Fabric", "Forge")[loader]) } }
+                            .buttonClickNoRipple { version?.let { if (!busy && name.isNotBlank()) onCreate(name.trim(), it.id, listOf("Vanilla", "Fabric", "Forge")[loader]) } }
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                     ) {
                         T(if (busy) "Создание…" else "Создать", 15, C.onAccent, FontWeight.Medium, lineHeight = 18)
@@ -275,6 +276,7 @@ fun SettingsDialog(
     var resolutionsOpen by remember { mutableStateOf(false) }
     var editingFolder by remember { mutableStateOf(false) }
     var resetDone by remember { mutableStateOf(false) }
+    var ghostResetDone by remember { mutableStateOf(false) }
     val settingsScroll = rememberScrollState()
     Modal(onDismiss) {
         Column(Modifier.fillMaxSize()) {
@@ -285,13 +287,13 @@ fun SettingsDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                T("Настройки", 24, C.text1, FontWeight.Bold, lineHeight = 29)
+                T("Настройки", 24, C.text1, FontWeight.SemiBold, lineHeight = 29)
                 Box(
                     Modifier
                         .size(28.dp)
                         .clip(CircleShape)
                         .background(C.fill)
-                        .clickNoRipple(onDismiss),
+                        .buttonClickNoRipple(onDismiss),
                     contentAlignment = Alignment.Center,
                 ) {
                     T("✕", 14, C.text2, FontWeight.Medium, lineHeight = 17)
@@ -313,7 +315,7 @@ fun SettingsDialog(
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("ОФОРМЛЕНИЕ", 13, C.text2, lineHeight = 16)
+                    T("Оформление", 13, C.text2, lineHeight = 16)
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.input).padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -322,22 +324,26 @@ fun SettingsDialog(
                         val themes = listOf("system", "light", "dark")
                         AnimatedSegments(listOf("Как в системе", "Светлая", "Тёмная"), themes.indexOf(settings.theme).coerceAtLeast(0),
                             { settings.theme = themes[it] }, fill = C.fill)
+                        T("Сезонное оформление", 15, C.text1, lineHeight = 18)
+                        val seasonalThemes = listOf("auto", "off", "winter")
+                        AnimatedSegments(listOf("Авто", "Выключено", "Зимнее"), seasonalThemes.indexOf(settings.seasonalTheme).coerceAtLeast(0),
+                            { settings.seasonalTheme = seasonalThemes[it] }, fill = C.fill)
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("СКАЧИВАНИЕ", 13, C.text2, lineHeight = 16)
+                    T("Скачивание", 13, C.text2, lineHeight = 16)
                     GameRow("Параллельные загрузки") {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             T("−", 20, if (settings.parallelDownloads > 1) C.accent else C.text2, lineHeight = 24,
-                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(C.fill).clickNoRipple { settings.parallelDownloads = (settings.parallelDownloads - 1).coerceAtLeast(1) }.padding(horizontal = 12.dp, vertical = 8.dp))
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(C.fill).buttonClickNoRipple { settings.parallelDownloads = (settings.parallelDownloads - 1).coerceAtLeast(1) }.padding(horizontal = 12.dp, vertical = 8.dp))
                             T("${settings.parallelDownloads}", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                             T("+", 20, if (settings.parallelDownloads < 16) C.accent else C.text2, lineHeight = 24,
-                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(C.fill).clickNoRipple { settings.parallelDownloads = (settings.parallelDownloads + 1).coerceAtMost(16) }.padding(horizontal = 12.dp, vertical = 8.dp))
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(C.fill).buttonClickNoRipple { settings.parallelDownloads = (settings.parallelDownloads + 1).coerceAtMost(16) }.padding(horizontal = 12.dp, vertical = 8.dp))
                         }
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("ПЛЕЕР", 13, C.text2, lineHeight = 16)
+                    T("Плеер", 13, C.text2, lineHeight = 16)
                     GameRow("Показывать плеер") { Switch(settings.showPlayer) { settings.showPlayer = it } }
                     if (settings.launcherMusic && settings.radioEnabled) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -368,7 +374,7 @@ fun SettingsDialog(
                     GameRow("Музыка C418 в меню игры") { Switch(settings.menuMusicPack) { settings.menuMusicPack = it } }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("МОДЫ", 13, C.text2, lineHeight = 16)
+                    T("Моды", 13, C.text2, lineHeight = 16)
                     GameRow("Проверять моды на угрозы") {
                         Switch(settings.modAntivirusEnabled) { settings.modAntivirusEnabled = it }
                     }
@@ -377,7 +383,7 @@ fun SettingsDialog(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("ПАМЯТЬ", 13, C.text2, lineHeight = 16)
+                    T("Память", 13, C.text2, lineHeight = 16)
                     Column(
                         Modifier
                             .fillMaxWidth()
@@ -402,8 +408,8 @@ fun SettingsDialog(
                                         .background(C.accentSoft)
                                         .padding(horizontal = 8.dp, vertical = 4.dp),
                                 ) {
-                                    T(if (settings.automaticMemory) "AUTO" else "ВРУЧНУЮ", 11, C.accent, lineHeight = 13,
-                                        modifier = Modifier.clickNoRipple { settings.automaticMemory = !settings.automaticMemory })
+                                    T(if (settings.automaticMemory) "Авто" else "Вручную", 11, C.accent, lineHeight = 13,
+                                        modifier = Modifier.buttonClickNoRipple { settings.automaticMemory = !settings.automaticMemory })
                                 }
                                 T("${settings.memoryGb} ГБ", 15, C.text1, lineHeight = 18)
                             }
@@ -428,15 +434,15 @@ fun SettingsDialog(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("ИГРА", 13, C.text2, lineHeight = 16)
+                    T("Игра", 13, C.text2, lineHeight = 16)
                     GameRow("Разрешение окна") {
                         Box {
-                            T("${settings.resolution} ▾", 15, C.text2, lineHeight = 19, modifier = Modifier.clickNoRipple { resolutionsOpen = true })
+                            T("${settings.resolution} ▾", 15, C.text2, lineHeight = 19, modifier = Modifier.buttonClickNoRipple { resolutionsOpen = true })
                             MotionDropdown(visible = resolutionsOpen, onDismiss = { resolutionsOpen = false }) {
                                 Column(Modifier.width(200.dp).softShadow(RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).background(C.elevated).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     listOf("1280 × 720", "1600 × 900", "1920 × 1080", "2560 × 1440").forEach { resolution ->
                                         T(resolution, 15, if (settings.resolution == resolution) C.accent else C.text1, lineHeight = 18,
-                                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickNoRipple { settings.resolution = resolution; resolutionsOpen = false }.padding(12.dp))
+                                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).buttonClickNoRipple { settings.resolution = resolution; resolutionsOpen = false }.padding(12.dp))
                                     }
                                 }
                             }
@@ -448,21 +454,21 @@ fun SettingsDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill)
-                                .clickNoRipple { if (!updateBusy) onCheckUpdates() }
+                                .buttonClickNoRipple { if (!updateBusy) onCheckUpdates() }
                                 .padding(horizontal = 14.dp, vertical = 9.dp),
                         ) {
                             T(if (updateBusy) "Проверяем…" else "Проверить сейчас", 13, C.text1, FontWeight.Medium, lineHeight = 17)
                         }
                         if (update?.available == true && !updateDownloaded) Box(
                             Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill)
-                                .clickNoRipple { if (!updateBusy) onDownloadUpdate() }
+                                .buttonClickNoRipple { if (!updateBusy) onDownloadUpdate() }
                                 .padding(horizontal = 14.dp, vertical = 9.dp),
                         ) {
                             T("Скачать обновление", 13, C.onAccent, FontWeight.Medium, lineHeight = 17)
                         }
                         if (updateDownloaded) Box(
                             Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill)
-                                .clickNoRipple(onOpenUpdate)
+                                .buttonClickNoRipple(onOpenUpdate)
                                 .padding(horizontal = 14.dp, vertical = 9.dp),
                         ) {
                             T("Открыть установщик", 13, C.onAccent, FontWeight.Medium, lineHeight = 17)
@@ -470,37 +476,218 @@ fun SettingsDialog(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("РЕЖИМ", 13, C.text2, lineHeight = 16)
+                    T("Режим", 13, C.text2, lineHeight = 16)
                     GameRow("Продвинутый режим") { Switch(settings.advancedMode) { settings.advancedMode = it } }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("ПАПКА ИГРЫ", 13, C.text2, lineHeight = 16)
+                    T("Папка игры", 13, C.text2, lineHeight = 16)
                     if (editingFolder) {
                         SearchBox(settings.folder, { settings.folder = it }, "Папка игры", Modifier.fillMaxWidth(), height = 44.dp)
-                        T("Готово", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple { editingFolder = false })
+                        T("Готово", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { editingFolder = false })
                     } else GameRow(settings.folder) {
-                        T("Изменить", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple { editingFolder = true })
+                        T("Изменить", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { editingFolder = true })
                     }
                 }
                 error?.let { T(it, 13, C.danger, lineHeight = 18) }
                 if (resetDone) T("Настройки сброшены", 13, C.success, lineHeight = 17)
                 Box(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.fill)
-                        .clickNoRipple { onReset(); resetDone = true }
+                        .buttonClickNoRipple { onReset(); resetDone = true }
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     T("Сбросить все", 14, C.text1, FontWeight.Medium, lineHeight = 18)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    T("БЕТА", 13, C.text2, lineHeight = 16)
+                    T("Бета", 13, C.text2, lineHeight = 16)
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.fill)
-                            .clickNoRipple(onRestartSetup)
+                            .buttonClickNoRipple(onRestartSetup)
                             .padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         T("Показать начальную настройку снова", 14, C.text1, FontWeight.Medium, lineHeight = 18)
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.fill)
+                            .buttonClickNoRipple { settings.resetGhostMode(); ghostResetDone = true }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        T("Сбросить Ghost Mode", 14, C.text1, FontWeight.Medium, lineHeight = 18)
+                    }
+                    if (ghostResetDone) T("Первый запуск Ghost Mode сброшен", 13, C.success, lineHeight = 17)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CrashHelperDialog(
+    build: com.cactuslauncher.model.LauncherBuild?,
+    message: String,
+    diagnosis: com.cactuslauncher.model.CrashDiagnosis?,
+    diagnosisLoading: Boolean,
+    recoveryBusy: Boolean,
+    recoveryMessage: String?,
+    canRollback: Boolean,
+    onTryRecovery: (String) -> Unit,
+    onRollback: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val knownDiagnosis = diagnosis != null && diagnosis.title != "Запусков для разбора пока нет"
+    val headline = when {
+        diagnosisLoading -> "Разбираем причину вылета…"
+        knownDiagnosis && diagnosis!!.title != "Причина не определяется однозначно" -> diagnosis.title
+        else -> "Игра неожиданно завершилась"
+    }
+    val detailText = when {
+        diagnosisLoading -> message
+        knownDiagnosis -> diagnosis!!.detail
+        else -> message
+    }
+    Modal(onDismiss = onDismiss, width = 540.dp, wrapHeight = true) {
+        Column(
+            Modifier.fillMaxWidth().padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                T("Crash Helper", 24, C.text1, FontWeight.SemiBold, lineHeight = 30)
+                T("Закрыть", 13, C.text2, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onDismiss))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                T(headline, 17, C.text1, FontWeight.SemiBold, lineHeight = 22)
+                T(detailText, 14, C.text2, lineHeight = 20)
+            }
+            if (build != null || (knownDiagnosis && diagnosis!!.evidence.isNotBlank()) || diagnosis?.suspectMod != null) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.fill).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (build != null) {
+                        T("${build.name}, Minecraft ${build.version}", 14, C.text1, FontWeight.Medium, lineHeight = 18)
+                        T("Загрузчик: ${build.loader}", 13, C.text2, lineHeight = 17)
+                    }
+                    if (knownDiagnosis && diagnosis!!.evidence.isNotBlank()) {
+                        T(diagnosis.evidence, 12, C.text2, lineHeight = 16, maxLines = 3)
+                    }
+                    diagnosis?.suspectMod?.let { mod ->
+                        T("Подозрительный мод: $mod", 13, C.accent, FontWeight.Medium, lineHeight = 17)
+                        if (diagnosis.confidence.isNotBlank()) {
+                            T(diagnosis.confidence, 12, C.text2, lineHeight = 16, maxLines = 2)
+                        }
+                    }
+                }
+            }
+            if (canRollback) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.fill).padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    T("Вылет произошёл после обновления модов", 13, C.text1, lineHeight = 17, modifier = Modifier.weight(1f))
+                    T("Откатить", 13, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onRollback))
+                }
+            }
+            recoveryMessage?.let {
+                T(it, 13, if (it.startsWith("Пробный запуск идёт")) C.accent else C.danger, lineHeight = 18)
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill)
+                        .buttonClickNoRipple(onDismiss)
+                        .padding(horizontal = 18.dp, vertical = 11.dp),
+                ) {
+                    T("Закрыть", 14, C.text1, FontWeight.Medium, lineHeight = 18, maxLines = 1)
+                }
+                val suspectMod = diagnosis?.suspectMod
+                if (diagnosis?.recoverable == true && suspectMod != null) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(999.dp)).background(if (recoveryBusy) C.fill else C.accentSoft)
+                            .then(if (recoveryBusy) Modifier else Modifier.buttonClickNoRipple { onTryRecovery(suspectMod) })
+                            .padding(horizontal = 18.dp, vertical = 11.dp),
+                    ) {
+                        T(if (recoveryBusy) "Запускаем…" else "Проверить без мода", 14, if (recoveryBusy) C.text2 else C.accent, FontWeight.Medium, lineHeight = 18, maxLines = 1)
+                    }
+                }
+                if (build != null) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill)
+                            .buttonClickNoRipple(onOpenLogs)
+                            .padding(horizontal = 18.dp, vertical = 11.dp),
+                    ) {
+                        T("Открыть логи", 14, C.onAccent, FontWeight.Medium, lineHeight = 18, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GhostModeIntroDialog(
+    onContinue: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    var secondsLeft by remember { mutableIntStateOf(10) }
+    LaunchedEffect(Unit) {
+        while (secondsLeft > 0) {
+            kotlinx.coroutines.delay(1000)
+            secondsLeft--
+        }
+        onContinue()
+    }
+    Modal(onDismiss = onCancel, width = 520.dp, wrapHeight = true) {
+        Column(
+            Modifier.fillMaxWidth().padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                T("Сейчас закроется лаунчер и запустится игра", 20, C.text1, FontWeight.SemiBold, lineHeight = 25)
+                T(
+                    "Для экономии ресурсов мы закрываем лаунчер при запуске игры - после выхода из Minecraft он откроется снова. Если вы не хотите этого, отключите Ghost Mode в настройках.",
+                    14,
+                    C.text2,
+                    lineHeight = 20,
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                T("Продолжение через $secondsLeft сек.", 14, C.text2, FontWeight.Medium, lineHeight = 18, maxLines = 1)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(C.fill)
+                            .buttonClickNoRipple(onCancel)
+                            .padding(horizontal = 18.dp, vertical = 10.dp),
+                    ) {
+                        T("Отмена", 14, C.text1, FontWeight.Medium, lineHeight = 18, maxLines = 1)
+                    }
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(C.accentFill)
+                            .buttonClickNoRipple(onContinue)
+                            .padding(horizontal = 18.dp, vertical = 10.dp),
+                    ) {
+                        T("Продолжить", 14, C.onAccent, FontWeight.Medium, lineHeight = 18, maxLines = 1)
                     }
                 }
             }
@@ -545,9 +732,12 @@ fun InitialSetupDialog(
             }
         }
     }
-    Box(Modifier.fillMaxSize().background(C.surface).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+    val winter = C.seasonal == "winter"
+    Box(Modifier.fillMaxSize().background(if (winter) C.window.copy(alpha = 0.15f) else C.surface).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
         Column(
-            Modifier.widthIn(max = 360.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
+            Modifier.widthIn(max = if (winter) 392.dp else 360.dp).fillMaxWidth()
+                .background(if (winter) C.surface.copy(alpha = 0.94f) else C.surface, RoundedCornerShape(16.dp))
+                .verticalScroll(rememberScrollState()).padding(horizontal = if (winter) 16.dp else 0.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(32.dp),
         ) {
             AnimatedContent(
@@ -571,7 +761,7 @@ fun InitialSetupDialog(
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(32.dp)) {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         T("Шаг $currentStep из 2", 13, C.text2, lineHeight = 16)
-                        T(if (currentStep == 1) "Как вас зовут?" else "Папка для игры", 28, C.text1, FontWeight.Bold, lineHeight = 34)
+                        T(if (currentStep == 1) "Как вас зовут?" else "Папка для игры", 28, C.text1, FontWeight.SemiBold, lineHeight = 34)
                         T(
                             if (currentStep == 1) "Имя будет видно в лаунчере. Его можно поменять в любой момент."
                             else "Здесь будут храниться сборки, миры и моды. Папку можно поменять позже.",
@@ -583,7 +773,7 @@ fun InitialSetupDialog(
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 T("Никнейм", 13, C.text1, FontWeight.Medium, lineHeight = 16)
                                 SetupInput(nickname, { nickname = it; localError = null }, "Steve")
-                                T("3–16 символов: A–Z, a–z, 0–9 и _", 12, if (nicknameValid || nickname.isEmpty()) C.text2 else C.danger, lineHeight = 15)
+                                T("3-16 символов: A-Z, a-z, 0-9 и _", 12, if (nicknameValid || nickname.isEmpty()) C.text2 else C.danger, lineHeight = 15)
                             }
                             SetupToggle("Автооптимизация Java", settings.autoJavaOptimization) { settings.autoJavaOptimization = it }
                         } else {
@@ -598,12 +788,12 @@ fun InitialSetupDialog(
                                     if (editingFolder) SetupTextEntry(settings.folder, { settings.folder = it }, "Папка игры", Modifier.weight(1f))
                                     else T(settings.folder, 15, C.text1, lineHeight = 18, maxLines = 1, modifier = Modifier.weight(1f))
                                     T(if (editingFolder) "Готово" else "Изменить", 13, C.accent, FontWeight.Medium, lineHeight = 16,
-                                        modifier = Modifier.clickNoRipple { editingFolder = !editingFolder })
+                                        modifier = Modifier.buttonClickNoRipple { editingFolder = !editingFolder })
                                 }
                                 Box(
                                     Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(8.dp))
                                         .background(C.fill)
-                                        .clickNoRipple {
+                                        .buttonClickNoRipple {
                                             if (!choosingFolder && !busy) {
                                                 scope.launch {
                                                     choosingFolder = true
@@ -638,15 +828,15 @@ fun InitialSetupDialog(
                                 ) {
                                     T("${settings.parallelDownloads}", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                                        T("−", 18, C.accent, lineHeight = 22, modifier = Modifier.clickNoRipple { settings.parallelDownloads = (settings.parallelDownloads - 1).coerceAtLeast(1) })
-                                        T("+", 18, C.accent, lineHeight = 22, modifier = Modifier.clickNoRipple { settings.parallelDownloads = (settings.parallelDownloads + 1).coerceAtMost(16) })
+                                        T("−", 18, C.accent, lineHeight = 22, modifier = Modifier.buttonClickNoRipple { settings.parallelDownloads = (settings.parallelDownloads - 1).coerceAtLeast(1) })
+                                        T("+", 18, C.accent, lineHeight = 22, modifier = Modifier.buttonClickNoRipple { settings.parallelDownloads = (settings.parallelDownloads + 1).coerceAtMost(16) })
                                     }
                                 }
                             }
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(
                                     Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.fill)
-                                        .clickNoRipple { otherSettingsOpen = !otherSettingsOpen }
+                                        .buttonClickNoRipple { otherSettingsOpen = !otherSettingsOpen }
                                         .padding(horizontal = 12.dp, vertical = 12.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically,
@@ -696,7 +886,7 @@ fun InitialSetupDialog(
                 Box(
                     Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(8.dp))
                         .background(if (busy) C.text2 else if (canContinue) C.accentFill else C.fill)
-                        .then(if (!canContinue) Modifier else Modifier.clickNoRipple {
+                        .then(if (!canContinue) Modifier else Modifier.buttonClickNoRipple {
                             if (step == 1) { localError = null; step = 2 }
                             else finish(nickname.trim())
                         }),
@@ -706,9 +896,9 @@ fun InitialSetupDialog(
                 }
                 if (step == 1) {
                     T("Пропустить настройку", 15, C.accent, lineHeight = 20,
-                        modifier = Modifier.clickNoRipple { finish(null) })
+                        modifier = Modifier.buttonClickNoRipple { finish(null) })
                 } else {
-                    T("Назад", 15, C.accent, lineHeight = 20, modifier = Modifier.clickNoRipple { if (!busy) step = 1 })
+                    T("Назад", 15, C.accent, lineHeight = 20, modifier = Modifier.buttonClickNoRipple { if (!busy) step = 1 })
                 }
                 localError?.let { T(it, 13, C.danger, lineHeight = 17, maxLines = 2) }
                 error?.let { T(it, 12, C.danger, lineHeight = 16, maxLines = 2) }

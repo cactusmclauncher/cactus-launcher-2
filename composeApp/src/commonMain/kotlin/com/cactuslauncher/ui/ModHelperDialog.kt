@@ -27,8 +27,8 @@ fun ModHelperDialog(issue: ModHelperIssue, onDismiss: () -> Unit, onOpenBuilds: 
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                T("Mod Helper", 24, C.text1, FontWeight.Bold, lineHeight = 30)
-                T("Закрыть", 13, C.text2, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onDismiss))
+                T("Mod Helper", 24, C.text1, FontWeight.SemiBold, lineHeight = 30)
+                T("Закрыть", 13, C.text2, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onDismiss))
             }
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 T("Нашлась несовместимость", 17, C.text1, FontWeight.SemiBold, lineHeight = 22)
@@ -57,10 +57,10 @@ fun ModHelperDialog(issue: ModHelperIssue, onDismiss: () -> Unit, onOpenBuilds: 
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill).clickNoRipple(onDismiss).padding(horizontal = 18.dp, vertical = 11.dp),
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill).buttonClickNoRipple(onDismiss).padding(horizontal = 18.dp, vertical = 11.dp),
                 ) { T("Остаться", 14, C.text1, FontWeight.Medium, lineHeight = 18) }
                 Box(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill).clickNoRipple(onOpenBuilds).padding(horizontal = 18.dp, vertical = 11.dp),
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(C.accentFill).buttonClickNoRipple(onOpenBuilds).padding(horizontal = 18.dp, vertical = 11.dp),
                 ) { T("К сборкам", 14, C.onAccent, FontWeight.Medium, lineHeight = 18) }
             }
         }

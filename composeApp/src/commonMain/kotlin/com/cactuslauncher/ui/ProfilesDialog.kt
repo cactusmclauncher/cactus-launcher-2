@@ -60,8 +60,8 @@ fun ProfilesDialog(
     Modal(onDismiss) {
         Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                T("Профили", 24, C.text1, FontWeight.Bold, lineHeight = 29)
-                Box(Modifier.size(28.dp).clip(CircleShape).background(C.fill).clickNoRipple(onDismiss), contentAlignment = Alignment.Center) {
+                T("Профили", 24, C.text1, FontWeight.SemiBold, lineHeight = 29)
+                Box(Modifier.size(28.dp).clip(CircleShape).background(C.fill).buttonClickNoRipple(onDismiss), contentAlignment = Alignment.Center) {
                     T("✕", 14, C.text2, FontWeight.Medium, lineHeight = 17)
                 }
             }
@@ -69,12 +69,12 @@ fun ProfilesDialog(
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (snapshot == null && !busy) {
                     T("Не удалось загрузить профили", 16, C.text1, FontWeight.Medium, lineHeight = 20)
-                    T("Повторить", 14, C.accent, lineHeight = 18, modifier = Modifier.clickNoRipple(onRetry))
+                    T("Повторить", 14, C.accent, lineHeight = 18, modifier = Modifier.buttonClickNoRipple(onRetry))
                 }
                 snapshot?.profiles?.forEach { profile ->
                     val active = profile.id == snapshot.activeId
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (active) C.accentSoft else C.input).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ProfileAvatar(profile.name, profile.avatar, 40.dp, Modifier.clickNoRipple { if (!busy) onChooseAvatar(profile.id) })
+                        ProfileAvatar(profile.name, profile.avatar, 40.dp, Modifier.buttonClickNoRipple { if (!busy) onChooseAvatar(profile.id) })
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             T(profile.name, 16, C.text1, FontWeight.Medium, lineHeight = 20)
                             T(if (active) "Активный, офлайн" else "Офлайн-профиль", 12, C.text2, lineHeight = 15)
@@ -82,11 +82,11 @@ fun ProfilesDialog(
                         // Hidden links keep their space, so "Изменить" and "Удалить" stay in place when the active profile changes.
                         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             T("Выбрать", 13, C.accent, FontWeight.Medium, lineHeight = 16,
-                                modifier = if (active) Modifier.alpha(0f) else Modifier.clickNoRipple { if (!busy) onSelect(profile.id) })
+                                modifier = if (active) Modifier.alpha(0f) else Modifier.buttonClickNoRipple { if (!busy) onSelect(profile.id) })
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                T("Изменить", 12, C.accent, lineHeight = 15, modifier = Modifier.clickNoRipple { if (!busy) { editing = profile; name = profile.name; deleting = null } })
+                                T("Изменить", 12, C.accent, lineHeight = 15, modifier = Modifier.buttonClickNoRipple { if (!busy) { editing = profile; name = profile.name; deleting = null } })
                                 T("Удалить", 12, C.danger, lineHeight = 15,
-                                    modifier = if (snapshot.profiles.size > 1) Modifier.clickNoRipple { if (!busy) deleting = profile } else Modifier.alpha(0f))
+                                    modifier = if (snapshot.profiles.size > 1) Modifier.buttonClickNoRipple { if (!busy) deleting = profile } else Modifier.alpha(0f))
                             }
                         }
                     }
@@ -96,8 +96,8 @@ fun ProfilesDialog(
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.input).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     T("Удалить профиль «${profile.name}»? Сборки и миры сохранятся.", 14, C.text1, lineHeight = 20)
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        T("Отмена", 14, C.text2, lineHeight = 18, modifier = Modifier.clickNoRipple { deleting = null })
-                        T("Удалить профиль", 14, C.danger, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple { if (!busy) onDelete(profile.id) })
+                        T("Отмена", 14, C.text2, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { deleting = null })
+                        T("Удалить профиль", 14, C.danger, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { if (!busy) onDelete(profile.id) })
                     }
                 }
             }
@@ -108,7 +108,7 @@ fun ProfilesDialog(
                 when {
                     externalAccountName != null -> {
                         T("Authlib Injector: ${externalAccountName}", 14, C.text1, FontWeight.Medium, lineHeight = 18)
-                        T("Выйти", 13, C.danger, lineHeight = 16, modifier = Modifier.clickNoRipple { if (!busy) onSignOutExternal() })
+                        T("Выйти", 13, C.danger, lineHeight = 16, modifier = Modifier.buttonClickNoRipple { if (!busy) onSignOutExternal() })
                     }
                     authlibLoginOpen -> {
                         T("Вход через Authlib Injector", 15, C.text1, FontWeight.Medium, lineHeight = 18)
@@ -120,25 +120,25 @@ fun ProfilesDialog(
                     editing == null -> {
                         T("Новый профиль", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                         T("Войти через Microsoft", 14, C.accent, FontWeight.Medium, lineHeight = 18,
-                            modifier = Modifier.clickNoRipple { microsoftUnavailable = true })
+                            modifier = Modifier.buttonClickNoRipple { microsoftUnavailable = true })
                         if (microsoftUnavailable) T("Пока недоступно в бете", 12, C.text2, lineHeight = 15)
                         if (advancedMode) T("Войти через Authlib Injector", 14, C.accent, FontWeight.Medium, lineHeight = 18,
-                            modifier = Modifier.clickNoRipple { authlibLoginOpen = true; microsoftUnavailable = false })
+                            modifier = Modifier.buttonClickNoRipple { authlibLoginOpen = true; microsoftUnavailable = false })
                         SearchBox(name, { name = it }, "Имя игрока", Modifier.fillMaxWidth(), height = 44.dp)
-                        T("3–16 символов: A–Z, a–z, 0–9 и _", 12, C.text2, lineHeight = 15)
+                        T("3-16 символов: A-Z, a-z, 0-9 и _", 12, C.text2, lineHeight = 15)
                     }
                     else -> {
                         T("Переименование профиля", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                         SearchBox(name, { name = it }, "Имя игрока", Modifier.fillMaxWidth(), height = 44.dp)
-                        T("3–16 символов: A–Z, a–z, 0–9 и _", 12, C.text2, lineHeight = 15)
+                        T("3-16 символов: A-Z, a-z, 0-9 и _", 12, C.text2, lineHeight = 15)
                         snapshot?.profiles?.find { it.id == editing?.id }?.let { current ->
                             Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 ProfileAvatar(current.name, current.avatar, 40.dp)
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     T(if (current.avatar == null) "Выбрать картинку" else "Сменить картинку", 14, C.accent, FontWeight.Medium, lineHeight = 18,
-                                        modifier = Modifier.clickNoRipple { if (!busy) onChooseAvatar(current.id) })
+                                        modifier = Modifier.buttonClickNoRipple { if (!busy) onChooseAvatar(current.id) })
                                     if (current.avatar != null) T("Убрать картинку", 12, C.danger, lineHeight = 15,
-                                        modifier = Modifier.clickNoRipple { if (!busy) onRemoveAvatar(current.id) })
+                                        modifier = Modifier.buttonClickNoRipple { if (!busy) onRemoveAvatar(current.id) })
                                     else T("PNG или JPG до 5 МБ, обрежется до квадрата", 12, C.text2, lineHeight = 15)
                                 }
                             }
@@ -149,16 +149,16 @@ fun ProfilesDialog(
             error?.let { T(it, 13, C.danger, lineHeight = 18) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                 if (authlibLoginOpen) {
-                    T("Назад", 14, C.text2, lineHeight = 18, modifier = Modifier.clickNoRipple { if (!busy) authlibLoginOpen = false })
+                    T("Назад", 14, C.text2, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { if (!busy) authlibLoginOpen = false })
                     val canSignIn = apiRoot.startsWith("https://") && username.isNotBlank() && password.isNotEmpty() && !busy
-                    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if (canSignIn) C.accentFill else C.fill).clickNoRipple {
+                    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if (canSignIn) C.accentFill else C.fill).buttonClickNoRipple {
                         if (canSignIn) onSignInExternal(apiRoot.trim(), username.trim(), password)
                     }.padding(horizontal = 24.dp, vertical = 12.dp)) {
                         T(if (busy) "Вход…" else "Войти", 15, if (canSignIn) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 18)
                     }
                 } else {
-                    if (editing != null) T("Отмена", 14, C.text2, lineHeight = 18, modifier = Modifier.clickNoRipple { editing = null; name = "" })
-                    if (externalAccountName == null) Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if (valid && !busy && snapshot != null) C.accentFill else C.fill).clickNoRipple {
+                    if (editing != null) T("Отмена", 14, C.text2, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { editing = null; name = "" })
+                    if (externalAccountName == null) Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if (valid && !busy && snapshot != null) C.accentFill else C.fill).buttonClickNoRipple {
                         if (valid && !busy && snapshot != null) { editing?.let { onRename(it.id, name) } ?: onAdd(name) }
                     }.padding(horizontal = 24.dp, vertical = 12.dp)) {
                         T(if (busy) "Сохранение…" else if (editing == null) "Добавить профиль" else "Сохранить", 15, if (valid && !busy) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 18)

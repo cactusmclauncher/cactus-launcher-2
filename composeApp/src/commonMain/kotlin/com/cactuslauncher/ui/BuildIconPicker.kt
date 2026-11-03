@@ -44,7 +44,7 @@ fun BuildIconPicker(build: LauncherBuild, busy: Boolean, onSelect: (String) -> U
                 T(if (open) "▴" else "▾", 12, C.text2, lineHeight = 15)
             }
             MotionDropdown(open, onDismiss = { open = false }) {
-                Column(Modifier.width(320.dp).padding(top = 48.dp).softShadow(RoundedCornerShape(14.dp), 12.dp, Color(0x26000000))
+                Column(Modifier.width(320.dp).padding(top = 48.dp).softShadow(RoundedCornerShape(14.dp), 8.dp, Color(0x1A000000))
                     .clip(RoundedCornerShape(14.dp)).background(C.elevated).border(1.dp, C.fill, RoundedCornerShape(14.dp)).padding(6.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     iconOptions.forEach { (id, label) ->

@@ -12,7 +12,7 @@ public final class BuildIcons {
     public static boolean choose(Path folder) throws Exception {
         final Path[] selected = {null};
         EventQueue.invokeAndWait(() -> {
-            var dialog = new FileDialog((Frame) null, "Иконка сборки — PNG или JPG", FileDialog.LOAD);
+            var dialog = new FileDialog((Frame) null, "Иконка сборки - PNG или JPG", FileDialog.LOAD);
             try {
                 dialog.setVisible(true);
                 if (dialog.getFile() != null) selected[0] = Path.of(dialog.getDirectory(), dialog.getFile());
@@ -27,7 +27,7 @@ public final class BuildIcons {
             var reader = readers.next();
             try {
                 reader.setInput(stream);
-                if (reader.getWidth(0) > 4096 || reader.getHeight(0) > 4096) throw new IOException("Размер изображения — не более 4096 × 4096.");
+                if (reader.getWidth(0) > 4096 || reader.getHeight(0) > 4096) throw new IOException("Размер изображения - не более 4096 × 4096.");
                 image = reader.read(0);
             } finally { reader.dispose(); }
         }

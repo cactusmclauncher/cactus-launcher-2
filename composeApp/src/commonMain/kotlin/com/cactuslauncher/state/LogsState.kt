@@ -30,10 +30,7 @@ class LogsState(
     var recoveryBusy by mutableStateOf(false)
     var recoveryMessage by mutableStateOf<String?>(null)
 
-    /** Diagnoses [id] once, then appends new log lines every 1.5 s, reading only the bytes added since the last poll. */
-    suspend fun follow(id: String) {
-        loading = true
-        error = null
+    suspend fun loadDiagnosis(id: String) {
         diagnosisLoading = true
         diagnosis = null
         recoveryMessage = null
@@ -46,6 +43,13 @@ class LogsState(
             messages.backgroundFailure("crash-diagnosis", "Не удалось разобрать причину вылета.", e)
         }
         finally { diagnosisLoading = false }
+    }
+
+    /** Diagnoses [id] once, then appends new log lines every 1.5 s, reading only the bytes added since the last poll. */
+    suspend fun follow(id: String) {
+        loading = true
+        error = null
+        loadDiagnosis(id)
         val buffer = ArrayDeque<String>()
         var offset = 0L
         var first = true

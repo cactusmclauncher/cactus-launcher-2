@@ -17,7 +17,10 @@ import androidx.compose.ui.unit.dp
  */
 object C {
     var dark by mutableStateOf(false)
+    var seasonal by mutableStateOf("off")
     private fun pick(light: Long, dark: Long) = Color(if (this.dark) dark else light)
+    private fun seasonalPick(light: Long, dark: Long, winterLight: Long, winterDark: Long) =
+        if (seasonal == "winter") Color(if (this.dark) winterDark else winterLight) else pick(light, dark)
 
     val window get() = pick(0xFFF5F5F7, 0xFF121314)
     val sidebar get() = pick(0xFFFBFBFD, 0xFF17181A)
@@ -32,11 +35,11 @@ object C {
     val text3 get() = pick(0xFF8E8E93, 0xFF878B91)
 
     /** Accent for text, links, focus and progress. */
-    val accent get() = pick(0xFF0071E3, 0xFF5AA2F7)
+    val accent get() = seasonalPick(0xFF0071E3, 0xFF5AA2F7, 0xFF1677C8, 0xFF72B8F5)
     /** Background of primary buttons; [onAccent] text on it passes WCAG AA in both themes. */
-    val accentFill get() = pick(0xFF0071E3, 0xFF2A72D4)
+    val accentFill get() = seasonalPick(0xFF0071E3, 0xFF2A72D4, 0xFF1677C8, 0xFF367FC5)
     val onAccent get() = pick(0xFFFFFFFF, 0xFFFFFFFF)
-    val accentSoft get() = pick(0xFFE5F1FC, 0xFF1D2F45)
+    val accentSoft get() = seasonalPick(0xFFE5F1FC, 0xFF1D2F45, 0xFFE5F4FC, 0xFF203A52)
     val fill get() = pick(0xFFE8E8ED, 0xFF303236)
     val input get() = pick(0xFFF5F5F7, 0xFF232528)
     val border get() = pick(0xFFD2D2D7, 0xFF3A3D42)
@@ -60,7 +63,7 @@ object C {
     val artPlaceholder get() = pick(0xFF99CCFF, 0xFF1D2F45)
 
     val banner get() = pick(0xFF1D1D1F, 0xFF232528)
-    val bannerEyebrow = Color(0xFF99CCFF)
+    val bannerEyebrow get() = if (seasonal == "winter") Color(0xFFB8E1FF) else Color(0xFF99CCFF)
     val bannerText = Color(0xFFEBEBF0)
 
     // news reader (green) theme

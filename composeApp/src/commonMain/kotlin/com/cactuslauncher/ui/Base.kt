@@ -11,6 +11,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.Image
@@ -85,6 +89,48 @@ fun Modifier.clickNoRipple(onClick: () -> Unit): Modifier {
         .pointerHoverIcon(PointerIcon.Hand)
         .focusProperties { canFocus = keyboardMode }
         .clickable(interactionSource = source, indication = null, onClick = onClick)
+}
+
+@Composable
+fun Modifier.buttonClickNoRipple(onClick: () -> Unit): Modifier =
+    buttonClickNoRipple(enabled = true, onClick = onClick)
+
+@Composable
+fun Modifier.buttonClickNoRipple(
+    enabled: Boolean,
+    interactionSource: MutableInteractionSource? = null,
+    onClick: () -> Unit,
+): Modifier {
+    val source = interactionSource ?: remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val pressed by source.collectIsPressedAsState()
+    val focused by source.collectIsFocusedAsState()
+    val keyboardMode = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+    val scale = rememberButtonPressScale(source, enabled)
+    val opacity = animateFloatAsState(
+        if (!enabled) 1f else if (pressed) 0.94f else if (hovered) 0.97f else 1f,
+        tween(CactusMotion.quick, easing = CactusMotion.easeOut), label = "button-tone",
+    )
+    val focusColor = C.accent
+    return Modifier
+        .pointerHoverIcon(if (enabled) PointerIcon.Hand else PointerIcon.Default)
+        .focusProperties { canFocus = enabled && keyboardMode }
+        .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+        .drawWithCache {
+            val radius = if (size.width == size.height) size.minDimension / 2f else 8.dp.toPx()
+            val corners = CornerRadius(radius)
+            val stroke = Stroke(1.dp.toPx())
+            onDrawWithContent {
+                drawContent()
+                if (focused && enabled && keyboardMode) drawRoundRect(focusColor, cornerRadius = corners, style = stroke)
+            }
+        }
+        .graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+            alpha = opacity.value
+        }
+        .then(this)
 }
 
 fun Color.hoverTint(): Color {

@@ -37,7 +37,7 @@ public final class ProfileAvatars {
     public static Path choose() throws Exception {
         final Path[] selected = {null};
         EventQueue.invokeAndWait(() -> {
-            var dialog = new FileDialog((Frame) null, "Картинка профиля — PNG или JPG", FileDialog.LOAD);
+            var dialog = new FileDialog((Frame) null, "Картинка профиля - PNG или JPG", FileDialog.LOAD);
             dialog.setFilenameFilter((directory, name) -> {
                 String lower = name.toLowerCase(Locale.ROOT);
                 return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
@@ -104,7 +104,7 @@ public final class ProfileAvatars {
                 int width = reader.getWidth(0), height = reader.getHeight(0);
                 if (width <= 0 || height <= 0) throw new IOException("Изображение пустое.");
                 if (width > MAX_SOURCE_DIMENSION || height > MAX_SOURCE_DIMENSION)
-                    throw new IOException("Размер изображения — не более 4096 × 4096.");
+                    throw new IOException("Размер изображения - не более 4096 × 4096.");
                 BufferedImage image = reader.read(0);
                 if (image == null) throw new IOException("Не удалось прочитать изображение.");
                 return image;

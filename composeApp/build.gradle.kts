@@ -22,6 +22,12 @@ kotlin {
                 implementation(compose.components.resources)
             }
         }
+        val desktopTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(compose.desktop.uiTestJUnit4)
+            }
+        }
         val desktopMain by getting {
             dependencies {
                 // -PallPlatforms bundles Skia for every desktop OS, so one JAR runs on Windows, macOS and Linux.

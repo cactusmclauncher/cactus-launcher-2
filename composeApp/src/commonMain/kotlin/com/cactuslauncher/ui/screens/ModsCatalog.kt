@@ -48,6 +48,7 @@ import com.cactuslauncher.ui.InstanceArtwork
 import com.cactuslauncher.ui.MotionDropdown
 import com.cactuslauncher.ui.SearchBox
 import com.cactuslauncher.ui.T
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.clickNoRipple
 import com.cactuslauncher.ui.softShadow
 
@@ -72,6 +73,7 @@ fun ModsCatalogScreen(
     securityReportsByProject: Map<String, ModSecurityReport>,
     scanningSecurityProjects: Set<String>,
     queuedProjectIds: List<String>,
+    queuePositions: Map<String, Int>,
     activeInstallProjectId: String?,
     installErrors: Map<String, String>,
     installQueueCount: Int,
@@ -100,7 +102,10 @@ fun ModsCatalogScreen(
     var segment by remember { mutableIntStateOf(0) }
     SideEffect { onCatalogSelected(segment == 1) }
     val selectedBuild = builds.firstOrNull { it.id == selectedBuildId }
-    val visibleMods = installedMods.filter { it.title.contains(query.trim(), true) || it.fileName.contains(query.trim(), true) }
+    val normalizedQuery = remember(query) { query.trim() }
+    val visibleMods = remember(installedMods, normalizedQuery) {
+        installedMods.filter { it.title.contains(normalizedQuery, true) || it.fileName.contains(normalizedQuery, true) }
+    }
     val visibleProjects = projects
     val problemsByFile = remember(problems) { problems.groupBy { it.fileName } }
     val catalogListState = rememberLazyListState()
@@ -123,7 +128,7 @@ fun ModsCatalogScreen(
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                T("Моды", 32, C.text1, FontWeight.Bold, lineHeight = 39)
+                T("Моды", 32, C.text1, FontWeight.SemiBold, lineHeight = 39)
                 T("Установленные файлы хранятся отдельно в каждой сборке", 14, C.text2, lineHeight = 20)
             }
             SearchBox(query, onQueryChange, "Поиск модов", Modifier.width(280.dp), elevated = true, fill = C.surface)
@@ -161,7 +166,7 @@ fun ModsCatalogScreen(
                         T("${if (query.isBlank()) "Популярное" else "Результаты поиска"}: ${modsCount(visibleProjects.size)} для Minecraft ${selectedBuild.version} (${selectedBuild.loader})", 13, C.text2, lineHeight = 16)
                     }
                     items(visibleProjects, key = { it.id }) { project ->
-                        val queuePosition = queuedProjectIds.indexOf(project.id).takeIf { it >= 0 }?.plus(1)
+                        val queuePosition = queuePositions[project.id]
                         ModrinthProjectRow(
                             project, icons[project.id], translatedDescriptions[project.id], showTranslatedDescriptions,
                             project.id in failedTranslationIds,
@@ -180,7 +185,7 @@ fun ModsCatalogScreen(
                     if (loadMoreError != null) item(key = "load-more-error") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             T("Не удалось загрузить продолжение ленты: $loadMoreError", 13, C.text2, lineHeight = 18)
-                            T("Повторить", 13, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onLoadMore))
+                            T("Повторить", 13, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onLoadMore))
                         }
                     }
                 }
@@ -228,10 +233,10 @@ fun ModsCatalogScreen(
             T(selectedBuild?.let { "Папка: ${it.name}/mods" } ?: "Сначала выберите сборку", 13, C.text2, lineHeight = 17)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 T("Перезагрузить", 14, if (selectedBuild == null) C.text2 else C.accent, FontWeight.Medium, lineHeight = 17,
-                    modifier = if (selectedBuild == null) Modifier else Modifier.clickNoRipple(onRefresh))
+                    modifier = if (selectedBuild == null) Modifier else Modifier.buttonClickNoRipple(onRefresh))
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(if (selectedBuild == null) C.fill else C.accentFill)
-                        .then(if (selectedBuild == null) Modifier else Modifier.clickNoRipple(onOpenFolder))
+                        .then(if (selectedBuild == null) Modifier else Modifier.buttonClickNoRipple(onOpenFolder))
                         .padding(horizontal = 24.dp, vertical = 12.dp),
                 ) {
                     T("Открыть папку модов", 15, if (selectedBuild == null) C.text2 else C.onAccent, FontWeight.Medium, lineHeight = 18)
@@ -275,7 +280,7 @@ internal fun BuildPicker(
         MotionDropdown(open, onDismiss = { open = false }) {
             Column(
                 Modifier.width(520.dp).heightIn(max = 420.dp).padding(top = 60.dp).verticalScroll(rememberScrollState())
-                    .softShadow(RoundedCornerShape(14.dp), elevation = 12.dp, color = Color(0x26000000))
+                    .softShadow(RoundedCornerShape(14.dp), elevation = 6.dp, color = Color(0x1A000000))
                     .clip(RoundedCornerShape(14.dp)).background(C.elevated).padding(6.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -284,7 +289,7 @@ internal fun BuildPicker(
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
                             .background(if (isSelected) C.fill else Color.Transparent)
-                            .clickNoRipple { open = false; onSelect(build) }
+                            .buttonClickNoRipple { open = false; onSelect(build) }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -367,22 +372,22 @@ private fun InstalledModRow(
                     installLabel(problem)?.let { label ->
                         val ready = label == "Установить" && !anyBusy
                         T(label, 12, if (ready) C.accent else C.text2, FontWeight.Medium, lineHeight = 15,
-                            modifier = if (ready) Modifier.clickNoRipple { onInstallMissing(problem) } else Modifier)
+                            modifier = if (ready) Modifier.buttonClickNoRipple { onInstallMissing(problem) } else Modifier)
                     }
                 }
             }
         }
         if (askUpdate && update != null) {
-            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingUpdate = false })
-            T("Обновить мод", 12, C.accent, FontWeight.Medium, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingUpdate = false; onUpdate() })
+            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.buttonClickNoRipple { confirmingUpdate = false })
+            T("Обновить мод", 12, C.accent, FontWeight.Medium, lineHeight = 15, modifier = Modifier.buttonClickNoRipple { confirmingUpdate = false; onUpdate() })
         } else if (update != null && !(confirmingRemove && !busy)) T(if (updating) "Обновляем…" else "Обновить", 12, if (anyBusy) C.text2 else C.accent, FontWeight.Medium, lineHeight = 15,
-            modifier = if (anyBusy) Modifier else Modifier.clickNoRipple { if (update.dependencies.isEmpty()) onUpdate() else confirmingUpdate = true })
+            modifier = if (anyBusy) Modifier else Modifier.buttonClickNoRipple { if (update.dependencies.isEmpty()) onUpdate() else confirmingUpdate = true })
         if (!askUpdate) if (confirmingRemove && !busy) {
-            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingRemove = false })
+            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.buttonClickNoRipple { confirmingRemove = false })
             T("Удалить мод", 12, if (anyBusy) C.text2 else C.dangerInk, FontWeight.Medium, lineHeight = 15,
-                modifier = if (anyBusy) Modifier else Modifier.clickNoRipple { confirmingRemove = false; onRemove() })
+                modifier = if (anyBusy) Modifier else Modifier.buttonClickNoRipple { confirmingRemove = false; onRemove() })
         } else T(if (busy) "Удаляем…" else "Удалить", 12, if (anyBusy) C.text2 else C.dangerInk, FontWeight.Medium, lineHeight = 15,
-            modifier = if (anyBusy) Modifier else Modifier.clickNoRipple { confirmingRemove = true })
+            modifier = if (anyBusy) Modifier else Modifier.buttonClickNoRipple { confirmingRemove = true })
         com.cactuslauncher.ui.Switch(mod.enabled, horizontalInset = 4.dp) { if (!anyBusy) onToggle(it) }
     }
 }
@@ -411,7 +416,7 @@ private fun InstalledHeader(
     ) {
         if (ask) {
             T("Вместе с обновлениями установятся: ${dependencies.joinToString(", ")}.", 13, C.text1, lineHeight = 16, maxLines = 2, modifier = Modifier.weight(1f))
-            T("Отмена", 13, C.text2, lineHeight = 16, modifier = Modifier.clickNoRipple { confirming = false })
+            T("Отмена", 13, C.text2, lineHeight = 16, modifier = Modifier.buttonClickNoRipple { confirming = false })
             UpdateAllButton("Обновить всё", true) { confirming = false; onUpdateAll() }
         } else {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -420,7 +425,7 @@ private fun InstalledHeader(
             }
             val canCheck = !checking && actionId == null
             T(if (checking) "Проверяем…" else "Проверить обновления", 13, if (canCheck) C.accent else C.text2, FontWeight.Medium, lineHeight = 16,
-                modifier = if (canCheck) Modifier.clickNoRipple(onCheck) else Modifier)
+                modifier = if (canCheck) Modifier.buttonClickNoRipple(onCheck) else Modifier)
             if (updates.isNotEmpty()) UpdateAllButton(if (actionId == "update:all") "Обновляем…" else "Обновить всё (${updates.size})", actionId == null) {
                 if (dependencies.isEmpty()) onUpdateAll() else confirming = true
             }
@@ -432,7 +437,7 @@ private fun InstalledHeader(
 private fun UpdateAllButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(999.dp)).background(if (enabled) C.accentFill else C.fill)
-            .then(if (enabled) Modifier.clickNoRipple(onClick) else Modifier)
+            .then(if (enabled) Modifier.buttonClickNoRipple(onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         T(label, 13, if (enabled) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 16)
@@ -491,7 +496,7 @@ private fun ModrinthProjectRow(
         }
         val canInstall = !installed && !downloading && queuePosition == null && !busy
         T(actionLabel, 13, if (canInstall) C.accent else C.text2, FontWeight.Medium, lineHeight = 16,
-            modifier = if (canInstall) Modifier.clickNoRipple(onInstall) else Modifier)
+            modifier = if (canInstall) Modifier.buttonClickNoRipple(onInstall) else Modifier)
     }
 }
 
@@ -531,7 +536,7 @@ internal fun EmptyState(title: String, description: String, action: String? = nu
         T(title, 17, C.text1, FontWeight.Medium, lineHeight = 21)
         T(description, 14, C.text2, lineHeight = 20)
         if (action != null && onAction != null) {
-            T(action, 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple(onAction))
+            T(action, 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple(onAction))
         }
     }
 }

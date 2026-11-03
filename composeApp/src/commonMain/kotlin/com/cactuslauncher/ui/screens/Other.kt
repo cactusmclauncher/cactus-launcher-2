@@ -62,6 +62,7 @@ import com.cactuslauncher.model.Screenshot
 import com.cactuslauncher.theme.C
 import com.cactuslauncher.ui.Modal
 import com.cactuslauncher.ui.T
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.clickNoRipple
 import com.cactuslauncher.ui.softShadow
 import kotlinx.coroutines.CancellationException
@@ -108,9 +109,9 @@ fun OtherScreen(
                 }.focusable().padding(40.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                T("← Остальное", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple { onOpenSection(null) })
+                T("← Остальное", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple { onOpenSection(null) })
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    T(current.title, 32, C.text1, FontWeight.Bold, lineHeight = 39)
+                    T(current.title, 32, C.text1, FontWeight.SemiBold, lineHeight = 39)
                     T(current.subtitle, 14, C.text2, lineHeight = 20)
                 }
                 when (current) {
@@ -145,7 +146,7 @@ private fun otherEntries(overview: OtherOverview?, shotThumbnail: suspend (Strin
 private fun OtherMenu(entries: List<OtherEntry>, onOpen: (OtherSection) -> Unit) {
     Column(Modifier.fillMaxSize().padding(40.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            T("Остальное", 32, C.text1, FontWeight.Bold, lineHeight = 39)
+            T("Остальное", 32, C.text1, FontWeight.SemiBold, lineHeight = 39)
             T("Скриншоты, серверы и другие возможности лаунчера", 14, C.text2, lineHeight = 20)
         }
         entries.forEach { entry ->
@@ -237,7 +238,7 @@ private fun ColumnScope.ScreenshotsSection(
         T(selectedBuild?.let { "Папка: ${it.name}/screenshots" } ?: "Сначала выберите сборку", 13, C.text2, lineHeight = 17)
         Box(
             Modifier.clip(RoundedCornerShape(999.dp)).background(if (selectedBuild == null) C.fill else C.accentFill)
-                .then(if (selectedBuild == null) Modifier else Modifier.clickNoRipple(state.onOpenFolder))
+                .then(if (selectedBuild == null) Modifier else Modifier.buttonClickNoRipple(state.onOpenFolder))
                 .padding(horizontal = 24.dp, vertical = 12.dp),
         ) {
             T("Открыть папку скриншотов", 15, if (selectedBuild == null) C.text2 else C.onAccent, FontWeight.Medium, lineHeight = 18)
@@ -303,7 +304,7 @@ fun ScreenshotViewer(
                     T(shot.takenText, 17, C.text1, FontWeight.SemiBold, lineHeight = 22)
                     T("${shot.fileName} · $position из $count", 13, C.text2, lineHeight = 17, maxLines = 1)
                 }
-                T("Закрыть", 13, C.text2, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onClose))
+                T("Закрыть", 13, C.text2, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onClose))
             }
             Box(
                 Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.fill),
@@ -316,21 +317,21 @@ fun ScreenshotViewer(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 val canMove = count > 1
                 T("← Предыдущий", 14, if (canMove) C.accent else C.text2, FontWeight.Medium, lineHeight = 18,
-                    modifier = if (canMove) Modifier.clickNoRipple { onMove(-1) } else Modifier)
+                    modifier = if (canMove) Modifier.buttonClickNoRipple { onMove(-1) } else Modifier)
                 T("Следующий →", 14, if (canMove) C.accent else C.text2, FontWeight.Medium, lineHeight = 18,
-                    modifier = if (canMove) Modifier.clickNoRipple { onMove(1) } else Modifier)
+                    modifier = if (canMove) Modifier.buttonClickNoRipple { onMove(1) } else Modifier)
                 Spacer(Modifier.weight(1f))
                 if (confirmingDelete) {
                     T("Удалить скриншот? Файл попадёт в корзину.", 14, C.text1, lineHeight = 18)
-                    T("Отмена", 14, C.text2, lineHeight = 18, modifier = Modifier.clickNoRipple { confirmingDelete = false })
+                    T("Отмена", 14, C.text2, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { confirmingDelete = false })
                     T("Удалить", 14, if (busy) C.text2 else C.dangerInk, FontWeight.Medium, lineHeight = 18,
-                        modifier = if (busy) Modifier else Modifier.clickNoRipple { confirmingDelete = false; onDelete() })
+                        modifier = if (busy) Modifier else Modifier.buttonClickNoRipple { confirmingDelete = false; onDelete() })
                 } else {
                     ViewerLink("Открыть в системе", busy, onOpenInSystem)
                     ViewerLink("Показать в папке", busy, onReveal)
                     ViewerLink("Скопировать", busy, onCopy)
                     T("Удалить", 14, if (busy) C.text2 else C.dangerInk, FontWeight.Medium, lineHeight = 18,
-                        modifier = if (busy) Modifier else Modifier.clickNoRipple { confirmingDelete = true })
+                        modifier = if (busy) Modifier else Modifier.buttonClickNoRipple { confirmingDelete = true })
                 }
             }
         }
@@ -340,7 +341,7 @@ fun ScreenshotViewer(
 @Composable
 private fun ViewerLink(label: String, busy: Boolean, onClick: () -> Unit) {
     T(label, 14, if (busy) C.text2 else C.accent, FontWeight.Medium, lineHeight = 18,
-        modifier = if (busy) Modifier else Modifier.clickNoRipple(onClick))
+        modifier = if (busy) Modifier else Modifier.buttonClickNoRipple(onClick))
 }
 
 /** "в 1 сборке", "в 3 сборках". */

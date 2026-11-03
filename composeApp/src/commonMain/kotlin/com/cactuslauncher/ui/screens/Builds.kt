@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cactuslauncher.theme.C
 import com.cactuslauncher.ui.T
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.clickNoRipple
 import com.cactuslauncher.ui.softShadow
 import com.cactuslauncher.ui.CactusMotion
@@ -58,6 +59,7 @@ import com.cactuslauncher.ui.InstanceArtwork
 import com.cactuslauncher.ui.BuildIconPicker
 import com.cactuslauncher.model.LauncherBuild
 import com.cactuslauncher.model.ModUpdateBackup
+import com.cactuslauncher.model.BuildSnapshot
 import com.cactuslauncher.model.JavaOptimizationPlan
 import com.cactuslauncher.model.JavaOptimizationInfo
 import com.cactuslauncher.ui.MemoryWarning
@@ -68,7 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 @Composable
-fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Boolean = false, error: String? = null, memoryGb: Int = 4, automaticMemory: Boolean = true, javaPlan: JavaOptimizationPlan? = null, javaPlanLoading: Boolean = false, javaOptimizationInfo: JavaOptimizationInfo? = null, resourcePacks: List<InstalledResourcePack> = emptyList(), resourcePacksLoading: Boolean = false, resourcePacksError: String? = null, onImportResourcePack: () -> Unit = {}, onToggleResourcePack: (InstalledResourcePack, Boolean) -> Unit = { _, _ -> }, onOpenResourcePacks: () -> Unit = {}, onRefreshResourcePacks: () -> Unit = {}, onMemoryChange: (Int) -> Unit = {}, onAutomaticMemoryChange: (Boolean) -> Unit = {}, onIcon: (String) -> Unit = {}, onRename: (String) -> Unit = {}, onDelete: (Boolean) -> Unit = {}, onOpenFolder: () -> Unit = {}, onAutoUpdateMods: (Boolean) -> Unit = {}, lastModUpdate: ModUpdateBackup? = null, rollingBackMods: Boolean = false, onRollbackMods: () -> Unit = {}, onBack: () -> Unit, onPlay: () -> Unit, onNewBuild: () -> Unit, onOpenLogs: () -> Unit = {}, onOpenMods: () -> Unit = {}) {
+fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Boolean = false, error: String? = null, memoryGb: Int = 4, automaticMemory: Boolean = true, javaPlan: JavaOptimizationPlan? = null, javaPlanLoading: Boolean = false, javaOptimizationInfo: JavaOptimizationInfo? = null, resourcePacks: List<InstalledResourcePack> = emptyList(), resourcePacksLoading: Boolean = false, resourcePacksError: String? = null, onImportResourcePack: () -> Unit = {}, onToggleResourcePack: (InstalledResourcePack, Boolean) -> Unit = { _, _ -> }, onOpenResourcePacks: () -> Unit = {}, onRefreshResourcePacks: () -> Unit = {}, onMemoryChange: (Int) -> Unit = {}, onAutomaticMemoryChange: (Boolean) -> Unit = {}, onIcon: (String) -> Unit = {}, onRename: (String) -> Unit = {}, onDelete: (Boolean) -> Unit = {}, onOpenFolder: () -> Unit = {}, onAutoUpdateMods: (Boolean) -> Unit = {}, lastModUpdate: ModUpdateBackup? = null, rollingBackMods: Boolean = false, onRollbackMods: () -> Unit = {}, snapshots: List<BuildSnapshot> = emptyList(), snapshotsLoading: Boolean = false, snapshotsBusy: Boolean = false, snapshotsError: String? = null, onCreateSnapshot: () -> Unit = {}, onRestoreSnapshot: (String) -> Unit = {}, onBack: () -> Unit, onPlay: () -> Unit, onNewBuild: () -> Unit, onOpenLogs: () -> Unit = {}, onOpenMods: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Обзор", "Моды", "Ресурспаки", "Настройки", "Логи")
 
@@ -76,7 +78,7 @@ fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Bool
         Modifier.fillMaxSize().padding(40.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        T("← Все сборки", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onBack))
+        T("← Все сборки", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onBack))
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -88,7 +90,7 @@ fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Bool
             ) {
                 InstanceArtwork(build, Modifier.size(64.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    T(build.name, 28, C.text1, FontWeight.Bold, lineHeight = 34)
+                    T(build.name, 28, C.text1, FontWeight.SemiBold, lineHeight = 34)
                     T("Minecraft ${build.version}, загрузчик ${build.loader}", 15, C.text2, lineHeight = 18)
                 }
             }
@@ -97,7 +99,7 @@ fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Bool
                 Modifier
                     .clip(RoundedCornerShape(999.dp))
                      .background(if (actionEnabled && !build.installed) C.accentFill else C.fill)
-                     .then(if (actionEnabled) Modifier.clickNoRipple(onPlay) else Modifier)
+                     .then(if (actionEnabled) Modifier.buttonClickNoRipple(onPlay) else Modifier)
                     .padding(horizontal = 32.dp, vertical = 14.dp),
             ) {
                 T(if (running) "Игра запущена" else if (build.installed) "Играть" else "Скачать", 15, if (actionEnabled && !build.installed) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 18)
@@ -108,7 +110,7 @@ fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Bool
             tabs.forEachIndexed { i, label ->
                 val active = i == tab
                 Column(
-                    Modifier.clickNoRipple {
+                    Modifier.buttonClickNoRipple {
                         when (i) {
                             1 -> onOpenMods()
                             4 -> onOpenLogs()
@@ -134,15 +136,44 @@ fun BuildManageScreen(build: LauncherBuild, busy: Boolean = false, running: Bool
                 }
             }
         }
-        if (tab == 0) {
-            T("Создать новую сборку", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onNewBuild))
-        }
         error?.let { T(it, 14, C.danger, lineHeight = 20) }
 
         when (tab) {
             0 -> OverviewTab(build, if (automaticMemory) javaPlan?.heapGb ?: memoryGb else memoryGb, automaticMemory, onOpenMods)
             2 -> PacksTab(resourcePacks, resourcePacksLoading, resourcePacksError, onImportResourcePack, onToggleResourcePack, onOpenResourcePacks, onRefreshResourcePacks)
-            else -> BuildSettingsTab(build, busy, memoryGb, automaticMemory, javaPlan, javaPlanLoading, javaOptimizationInfo, onMemoryChange, onAutomaticMemoryChange, onIcon, onRename, onDelete, onOpenFolder, onAutoUpdateMods, lastModUpdate, rollingBackMods, onRollbackMods)
+            else -> BuildSettingsTab(build, busy, memoryGb, automaticMemory, javaPlan, javaPlanLoading, javaOptimizationInfo, onMemoryChange, onAutomaticMemoryChange, onIcon, onRename, onDelete, onOpenFolder, onAutoUpdateMods, lastModUpdate, rollingBackMods, onRollbackMods, snapshots, snapshotsLoading, snapshotsBusy, snapshotsError, running, onCreateSnapshot, onRestoreSnapshot)
+        }
+    }
+}
+
+@Composable
+private fun SnapshotPanel(snapshots: List<BuildSnapshot>, loading: Boolean, busy: Boolean, error: String?, running: Boolean, onCreate: () -> Unit, onRestore: (String) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.surface).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            T(if (busy) "Сохраняем…" else "Создать точку", 14, if (busy || running) C.text2 else C.accent, FontWeight.Medium, lineHeight = 18,
+                modifier = Modifier.buttonClickNoRipple { if (!busy && !running) onCreate() })
+        }
+        when {
+            loading -> T("Считываем историю…", 13, C.text2, lineHeight = 17)
+            error != null -> T(error, 13, C.danger, lineHeight = 18)
+            snapshots.isEmpty() -> T("Точек пока нет. Создай первую перед экспериментами с модами.", 13, C.text2, lineHeight = 18)
+            else -> snapshots.takeLast(3).asReversed().forEach { snapshot ->
+                val date = remember(snapshot.createdMillis) {
+                    val formatter = java.text.SimpleDateFormat("dd.MM.yyyy, HH:mm", java.util.Locale.getDefault())
+                    formatter.format(java.util.Date(snapshot.createdMillis))
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        T(snapshot.label, 14, C.text1, FontWeight.Medium, lineHeight = 17, maxLines = 1)
+                        T("$date · ${snapshot.files} файлов · ${snapshot.uniqueBytes / (1024 * 1024)} МБ", 12, C.text2, lineHeight = 15)
+                    }
+                    T("Откатить", 13, if (busy || running) C.text2 else C.accent, FontWeight.Medium, lineHeight = 17,
+                        modifier = Modifier.buttonClickNoRipple { if (!busy && !running) onRestore(snapshot.id) })
+                }
+            }
         }
     }
 }
@@ -179,7 +210,7 @@ private fun ColumnScope.OverviewTab(build: LauncherBuild, memoryGb: Int, automat
         ) {
             T("Моды", 17, C.text1, FontWeight.Medium, lineHeight = 21)
             T("Моды ставятся, включаются и удаляются в разделе «Моды».", 15, C.text2, lineHeight = 20)
-            T("Открыть моды сборки", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple(onOpenMods))
+            T("Открыть моды сборки", 14, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple(onOpenMods))
         }
     }
 }
@@ -204,7 +235,7 @@ private fun Toolbar(placeholder: String, action: String, query: String, onAction
             Modifier
                 .clip(RoundedCornerShape(999.dp))
                 .background(C.accentFill)
-                .clickNoRipple(onAction)
+                .buttonClickNoRipple(onAction)
                 .padding(horizontal = 20.dp, vertical = 10.dp),
         ) {
             T(action, 14, C.onAccent, FontWeight.Medium, lineHeight = 17)
@@ -251,14 +282,14 @@ private fun ColumnScope.PacksTab(packs: List<InstalledResourcePack>, loading: Bo
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            T("Открыть папку ресурспаков", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onOpenFolder))
-            T("Обновить", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.clickNoRipple(onRefresh))
+            T("Открыть папку ресурспаков", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onOpenFolder))
+            T("Обновить", 14, C.accent, FontWeight.Medium, lineHeight = 17, modifier = Modifier.buttonClickNoRipple(onRefresh))
         }
     }
 }
 
 @Composable
-private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, memoryGb: Int, automaticMemory: Boolean, javaPlan: JavaOptimizationPlan?, javaPlanLoading: Boolean, javaOptimizationInfo: JavaOptimizationInfo?, onMemoryChange: (Int) -> Unit, onAutomaticMemoryChange: (Boolean) -> Unit, onIcon: (String) -> Unit, onRename: (String) -> Unit, onDelete: (Boolean) -> Unit, onOpenFolder: () -> Unit, onAutoUpdateMods: (Boolean) -> Unit, lastModUpdate: ModUpdateBackup?, rollingBackMods: Boolean, onRollbackMods: () -> Unit) {
+private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, memoryGb: Int, automaticMemory: Boolean, javaPlan: JavaOptimizationPlan?, javaPlanLoading: Boolean, javaOptimizationInfo: JavaOptimizationInfo?, onMemoryChange: (Int) -> Unit, onAutomaticMemoryChange: (Boolean) -> Unit, onIcon: (String) -> Unit, onRename: (String) -> Unit, onDelete: (Boolean) -> Unit, onOpenFolder: () -> Unit, onAutoUpdateMods: (Boolean) -> Unit, lastModUpdate: ModUpdateBackup?, rollingBackMods: Boolean, onRollbackMods: () -> Unit, snapshots: List<BuildSnapshot>, snapshotsLoading: Boolean, snapshotsBusy: Boolean, snapshotsError: String?, running: Boolean, onCreateSnapshot: () -> Unit, onRestoreSnapshot: (String) -> Unit) {
     val jvmArguments = remember(javaPlan) {
         javaPlan?.let { plan ->
             (listOf("-Xmx${plan.heapGb}G") + plan.arguments.filterNot {
@@ -281,15 +312,15 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
     var deleteFiles by remember(build.id) { mutableStateOf(false) }
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            T("ОСНОВНОЕ", 13, C.text2, lineHeight = 16)
+            T("Основное", 13, C.text2, lineHeight = 16)
             SearchBox(name, { name = it }, "Название сборки", Modifier.fillMaxWidth(), height = 44.dp)
             T(if (busy) "Сохранение…" else "Сохранить название", 15, C.accent, lineHeight = 18,
-                modifier = Modifier.clickNoRipple { if (!busy) onRename(name) })
+                modifier = Modifier.buttonClickNoRipple { if (!busy) onRename(name) })
             BuildIconPicker(build, busy, onIcon)
-            SettingRow("Папка сборки") { T("Открыть", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.clickNoRipple { if (!busy) onOpenFolder() }) }
+            SettingRow("Папка сборки") { T("Открыть", 15, C.accent, FontWeight.Medium, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { if (!busy) onOpenFolder() }) }
         }
         if (!build.loader.equals("Vanilla", ignoreCase = true)) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            T("МОДЫ", 13, C.text2, lineHeight = 16)
+            T("Моды", 13, C.text2, lineHeight = 16)
             SettingRow("Обновлять моды перед запуском") {
                 com.cactuslauncher.ui.Switch(build.autoUpdateMods, horizontalInset = 4.dp) { if (!busy) onAutoUpdateMods(it) }
             }
@@ -298,12 +329,16 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
                 val files = backup.replaced + backup.added
                 SettingRow("Последнее обновление модов (${backup.createdShort}, $files ${filesWord(files)})") {
                     T(if (rollingBackMods) "Откатываем…" else "Откатить", 15, if (busy || rollingBackMods) C.text2 else C.accent, FontWeight.Medium, lineHeight = 18,
-                        modifier = Modifier.clickNoRipple { if (!busy && !rollingBackMods) onRollbackMods() })
+                        modifier = Modifier.buttonClickNoRipple { if (!busy && !rollingBackMods) onRollbackMods() })
                 }
             }
         }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            T("Точки восстановления", 13, C.text2, lineHeight = 16)
+            SnapshotPanel(snapshots, snapshotsLoading, snapshotsBusy, snapshotsError, running, onCreateSnapshot, onRestoreSnapshot)
+        }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            T("ПРОИЗВОДИТЕЛЬНОСТЬ", 13, C.text2, lineHeight = 16)
+            T("Производительность", 13, C.text2, lineHeight = 16)
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -325,8 +360,8 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
                                 .background(C.accentSoft)
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                         ) {
-                            T(if (automaticMemory) "AUTO" else "ВРУЧНУЮ", 11, C.accent, lineHeight = 13,
-                                modifier = Modifier.clickNoRipple { onAutomaticMemoryChange(!automaticMemory) })
+                            T(if (automaticMemory) "Авто" else "Вручную", 11, C.accent, lineHeight = 13,
+                                modifier = Modifier.buttonClickNoRipple { onAutomaticMemoryChange(!automaticMemory) })
                         }
                         T("${javaPlan?.heapGb ?: memoryGb} ГБ", 15, C.text1, lineHeight = 18)
                     }
@@ -369,7 +404,7 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingRow("Удалить сборку", labelColor = C.danger) {
                 T(if (busy) "Удаление…" else if (deleting) "Подтвердить" else "Удалить из списка", 15, C.danger, lineHeight = 18,
-                    modifier = Modifier.clickNoRipple { if (!busy) { if (deleting) onDelete(deleteFiles) else deleting = true } })
+                    modifier = Modifier.buttonClickNoRipple { if (!busy) { if (deleting) onDelete(deleteFiles) else deleting = true } })
             }
             if (deleting) {
                 Row(
@@ -413,7 +448,7 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
                         T("Включая моды и миры", 12, C.text2, lineHeight = 15)
                     }
                 }
-                T("Отмена", 14, C.accent, lineHeight = 18, modifier = Modifier.clickNoRipple { deleting = false })
+                T("Отмена", 14, C.accent, lineHeight = 18, modifier = Modifier.buttonClickNoRipple { deleting = false })
             }
         }
     }

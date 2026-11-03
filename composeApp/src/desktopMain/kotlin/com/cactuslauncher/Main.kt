@@ -33,7 +33,15 @@ fun main() = application {
         // Light keeps the default selection colours.
         val selection = if (dark) TextSelectionColors(C.accent, C.accent.copy(alpha = 0.35f)) else LocalTextSelectionColors.current
         CompositionLocalProvider(LocalTextSelectionColors provides selection) {
-            App(game, onGhostMode = { game.stopLauncherMusic(); exitApplication() })
+            App(
+                game,
+                onGhostMode = { game.stopLauncherMusic(); exitApplication() },
+                onBringToFront = {
+                    if (state.isMinimized) state.isMinimized = false
+                    window.toFront()
+                    window.requestFocus()
+                },
+            )
         }
     }
 }

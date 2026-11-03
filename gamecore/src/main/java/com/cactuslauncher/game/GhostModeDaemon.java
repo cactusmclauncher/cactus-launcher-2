@@ -21,6 +21,7 @@ public final class GhostModeDaemon {
         try {
             Handoff data = read(handoff);
             Files.deleteIfExists(handoff);
+            long startedNanos = System.nanoTime();
             game = new ProcessBuilder(data.gameCommand())
                     .directory(data.gameDirectory().toFile())
                     .redirectErrorStream(true)
@@ -30,7 +31,9 @@ public final class GhostModeDaemon {
             startupConfirmed = true;
             Thread playtime = trackPlaytime(game, data.gameDirectory());
             writeGameOutput(game, data.logFile());
-            game.waitFor();
+            int exitCode = game.waitFor();
+            boolean quickExit = System.nanoTime() - startedNanos < java.util.concurrent.TimeUnit.SECONDS.toNanos(90);
+            recordGhostExit(data.gameDirectory(), exitCode, quickExit);
             playtime.join(5000);
             waitForStatusAcknowledgement(status);
             Files.deleteIfExists(status);
@@ -51,6 +54,19 @@ public final class GhostModeDaemon {
         } finally {
             try { Files.deleteIfExists(handoff); } catch (IOException ignored) {}
         }
+    }
+
+    static void recordGhostExit(Path buildFolder, int exitCode, boolean quickExit) {
+        Path marker = buildFolder.resolve(".cactus-ghost-exit");
+        try {
+            if (Files.isSymbolicLink(marker)) return;
+            if (exitCode != 0 || quickExit) {
+                Files.writeString(marker, exitCode + " " + (quickExit ? "1" : "0"), StandardCharsets.UTF_8);
+            } else {
+                Files.deleteIfExists(marker);
+                ModBackups.confirmLatest(buildFolder);
+            }
+        } catch (IOException ignored) {}
     }
 
     /** Counts play time like the launcher does, since the launcher is closed while Ghost Mode runs. */

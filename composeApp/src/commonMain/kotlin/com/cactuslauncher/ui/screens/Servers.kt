@@ -43,7 +43,7 @@ import com.cactuslauncher.theme.C
 import com.cactuslauncher.ui.BuildArtwork
 import com.cactuslauncher.ui.SearchBox
 import com.cactuslauncher.ui.T
-import com.cactuslauncher.ui.clickNoRipple
+import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.softShadow
 
 /** What the servers section shows and does; App wires it to ServersState. */
@@ -99,7 +99,7 @@ internal fun ColumnScope.ServersSection(
                             modifier = Modifier.weight(1f))
                         val canRefresh = !state.refreshing
                         T(if (state.refreshing) "Обновляем…" else "Обновить", 13, if (canRefresh) C.accent else C.text2, FontWeight.Medium, lineHeight = 16,
-                            modifier = if (canRefresh) Modifier.clickNoRipple(state.onRefresh) else Modifier)
+                            modifier = if (canRefresh) Modifier.buttonClickNoRipple(state.onRefresh) else Modifier)
                     }
                 }
                 val form = state.form
@@ -119,7 +119,7 @@ internal fun ColumnScope.ServersSection(
         val canAdd = selectedBuild != null && state.form == null && !state.loading && state.error == null
         Box(
             Modifier.clip(RoundedCornerShape(999.dp)).background(if (canAdd) C.accentFill else C.fill)
-                .then(if (canAdd) Modifier.clickNoRipple(state.onAdd) else Modifier)
+                .then(if (canAdd) Modifier.buttonClickNoRipple(state.onAdd) else Modifier)
                 .padding(horizontal = 24.dp, vertical = 12.dp),
         ) {
             T("Добавить сервер", 15, if (canAdd) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 18)
@@ -164,14 +164,14 @@ private fun ServerRow(server: MinecraftServer, ping: ServerPingState?, state: Se
         }
         val enabled = !state.busy && state.form == null
         if (confirmingRemove) {
-            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.clickNoRipple { confirmingRemove = false })
+            T("Отмена", 12, C.text2, lineHeight = 15, modifier = Modifier.buttonClickNoRipple { confirmingRemove = false })
             T("Удалить сервер", 12, if (enabled) C.dangerInk else C.text2, FontWeight.Medium, lineHeight = 15,
-                modifier = if (enabled) Modifier.clickNoRipple { confirmingRemove = false; state.onRemove(server) } else Modifier)
+                modifier = if (enabled) Modifier.buttonClickNoRipple { confirmingRemove = false; state.onRemove(server) } else Modifier)
         } else {
             T("Изменить", 12, if (enabled) C.accent else C.text2, FontWeight.Medium, lineHeight = 15,
-                modifier = if (enabled) Modifier.clickNoRipple { state.onEdit(server) } else Modifier)
+                modifier = if (enabled) Modifier.buttonClickNoRipple { state.onEdit(server) } else Modifier)
             T("Удалить", 12, if (enabled) C.dangerInk else C.text2, FontWeight.Medium, lineHeight = 15,
-                modifier = if (enabled) Modifier.clickNoRipple { confirmingRemove = true } else Modifier)
+                modifier = if (enabled) Modifier.buttonClickNoRipple { confirmingRemove = true } else Modifier)
             PillButton("Играть", !state.playBlocked) { state.onPlay(server) }
         }
     }
@@ -205,7 +205,7 @@ private fun ServerFormCard(form: ServerForm, state: ServersSectionState) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             T(form.error ?: "Без порта используется 25565.", 12, if (form.error != null) C.dangerInk else C.text2, lineHeight = 15, maxLines = 2,
                 modifier = Modifier.weight(1f))
-            T("Отмена", 13, C.text2, lineHeight = 16, modifier = Modifier.clickNoRipple(state.onFormCancel))
+            T("Отмена", 13, C.text2, lineHeight = 16, modifier = Modifier.buttonClickNoRipple(state.onFormCancel))
             PillButton(if (state.busy) "Сохраняем…" else if (form.index == null) "Добавить" else "Сохранить", !state.busy, state.onFormSave)
         }
     }
@@ -215,7 +215,7 @@ private fun ServerFormCard(form: ServerForm, state: ServersSectionState) {
 private fun PillButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(999.dp)).background(if (enabled) C.accentFill else C.fill)
-            .then(if (enabled) Modifier.clickNoRipple(onClick) else Modifier)
+            .then(if (enabled) Modifier.buttonClickNoRipple(onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         T(label, 13, if (enabled) C.onAccent else C.text2, FontWeight.Medium, lineHeight = 16)

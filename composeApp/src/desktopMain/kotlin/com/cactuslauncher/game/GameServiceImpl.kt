@@ -60,6 +60,22 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         else buildStore.setIcon(id, icon).uiBuilds()
     }
     override suspend fun setAutoUpdateMods(id: String, enabled: Boolean) = withContext(Dispatchers.IO) { buildStore.setAutoUpdateMods(id, enabled).uiBuilds() }
+    private fun requireBuildStopped(id: String) {
+        synchronized(runningBuilds) { require(runningBuilds[id]?.isAlive != true && id !in launchingBuilds) { "Сначала закройте игру этой сборки." } }
+    }
+    override suspend fun buildSnapshots(id: String) = withContext(Dispatchers.IO) {
+        BuildSnapshots.list(buildStore.folder(id)).map { com.cactuslauncher.model.BuildSnapshot(it.id(), it.createdMillis(), it.label(), it.files(), it.uniqueBytes()) }
+    }
+    override suspend fun createBuildSnapshot(id: String, label: String) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        requireBuildStopped(id)
+        val snapshot = BuildSnapshots.create(buildStore.folder(id), label)
+        com.cactuslauncher.model.BuildSnapshot(snapshot.id(), snapshot.createdMillis(), snapshot.label(), snapshot.files(), snapshot.uniqueBytes())
+    }
+    override suspend fun restoreBuildSnapshot(id: String, snapshotId: String) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        requireBuildStopped(id)
+        BuildSnapshots.restore(buildStore.folder(id), snapshotId)
+        Unit
+    }
     private val modUpdater by lazy { ModUpdater(modrinth) }
     private fun modBuild(id: String): BuildStore.Build {
         val build = buildStore.load().find { it.id() == id } ?: throw IOException("Сборка не найдена.")
@@ -319,14 +335,23 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
     override suspend fun openResourcePacksFolder(id: String) = withContext(Dispatchers.IO) {
         BuildFolders.open(resourcePackStore.folder(buildStore.folder(id)))
     }
+    override suspend fun detectConflictingSoftware() = withContext(Dispatchers.IO) {
+        ConflictingSoftwareScanner.detect()?.let {
+            com.cactuslauncher.model.ConflictingSoftware(it.name(), it.detail(), it.uninstallable())
+        }
+    }
+    override suspend fun uninstallConflictingSoftware() = withContext(Dispatchers.IO) {
+        ConflictingSoftwareScanner.uninstall()
+    }
     override suspend fun loadPreferences() = withContext(Dispatchers.IO) {
         preferencesStore.load()?.let {
             menuMusicPack = it.menuMusicPack()
             com.cactuslauncher.model.LauncherPreferencesSnapshot(
                 it.setupComplete(), it.showPlayer(), it.parallelDownloads(), it.memoryGb(), it.automaticMemory(),
                 it.autoJavaOptimization(), it.ghostMode(), it.fullscreen(), it.autoUpdate(), it.advancedMode(),
-                it.translateModDescriptions(), it.modAntivirusEnabled(), it.resolution(), it.folder(), it.theme(),
-                it.launcherMusic(), it.menuMusicPack(), it.playerMode(), it.radioEnabled(),
+                 it.translateModDescriptions(), it.modAntivirusEnabled(), it.resolution(), it.folder(), it.theme(), it.seasonalTheme(),
+
+                it.launcherMusic(), it.menuMusicPack(), it.playerMode(), it.radioEnabled(), it.ghostModeIntroSeen(),
             )
         }
     }
@@ -335,8 +360,9 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         preferencesStore.save(LauncherPreferencesStore.Preferences(
             value.setupComplete, value.showPlayer, value.parallelDownloads, value.memoryGb, value.automaticMemory,
             value.autoJavaOptimization, value.ghostMode, value.fullscreen, value.autoUpdate, value.advancedMode,
-            value.translateModDescriptions, value.modAntivirusEnabled, value.resolution, value.folder, value.theme,
-            value.launcherMusic, value.menuMusicPack, value.playerMode, value.radioEnabled,
+             value.translateModDescriptions, value.modAntivirusEnabled, value.resolution, value.folder, value.theme,
+             value.seasonalTheme, value.launcherMusic, value.menuMusicPack, value.playerMode, value.radioEnabled, value.ghostModeIntroSeen,
+
         ))
     }
     override suspend fun checkLauncherUpdate() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
@@ -423,7 +449,32 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
             ?: throw IOException("Создайте профиль игрока перед запуском.")
     }
     private val launchFailures = java.util.concurrent.ConcurrentLinkedQueue<Pair<String, String>>()
-    override suspend fun takeLaunchFailures(): List<Pair<String, String>> = buildList { while (true) add(launchFailures.poll() ?: break) }
+    private val ghostExitChecked = java.util.concurrent.atomic.AtomicBoolean(false)
+    private fun collectGhostModeFailures() {
+        if (!ghostExitChecked.compareAndSet(false, true)) return
+        val builds = try { buildStore.load() } catch (_: Exception) { return }
+        for (build in builds) {
+            try {
+                val folder = buildStore.folder(build.id())
+                val marker = folder.resolve(".cactus-ghost-exit")
+                if (java.nio.file.Files.isSymbolicLink(marker) || !java.nio.file.Files.isRegularFile(marker)) continue
+                val raw = java.nio.file.Files.readString(marker, Charsets.UTF_8).trim()
+                java.nio.file.Files.deleteIfExists(marker)
+                val parts = raw.split(' ')
+                val code = parts.firstOrNull()?.toIntOrNull() ?: continue
+                val quickExit = parts.getOrNull(1) == "1"
+                if (code != 0 || quickExit) {
+                    launchFailureMessage(build.id(), code, onlyKnown = code == 0)?.let { launchFailures.add(build.id() to it) }
+                }
+            } catch (e: Exception) {
+                reportError("ghost-exit-check", e)
+            }
+        }
+    }
+    override suspend fun takeLaunchFailures(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        collectGhostModeFailures()
+        buildList { while (true) add(launchFailures.poll() ?: break) }
+    }
     private fun launchFailureMessage(id: String, exitCode: Int, onlyKnown: Boolean): String? {
         val diagnosis = try {
             buildStore.load().find { it.id() == id }?.let { CrashDiagnosis().analyze(buildStore.folder(id), it.version(), it.loader()) }
@@ -431,7 +482,7 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         val known = diagnosis != null && diagnosis.title() != CrashDiagnosis.UNKNOWN_TITLE && diagnosis.title() != CrashDiagnosis.NO_LOGS_TITLE
         if (onlyKnown && !known) return null
         val reason = if (known) " ${diagnosis!!.title()}. ${diagnosis.detail()}" else ""
-        return "Minecraft завершился с ошибкой (код $exitCode).$reason Подробности — в логах сборки."
+        return "Minecraft завершился с ошибкой (код $exitCode).$reason Подробности - в логах сборки."
     }
     private fun watchLaunchedProcess(id: String, process: Process) {
         val started = System.nanoTime()
@@ -645,6 +696,8 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         profileAvatars.delete(id)
         next.ui()
     }
+    override fun automaticSeasonalTheme(): String = com.cactuslauncher.game.SeasonalTheme.current()
+
     override fun gameDir(): String = core.defaultGameDir()
     override suspend fun audioSessions() = withContext(Dispatchers.IO) {
         val os = System.getProperty("os.name", "").lowercase()
