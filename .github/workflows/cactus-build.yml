@@ -1,0 +1,52 @@
+name: CactusBuild
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/cactus-build.yml'
+      - 'composeApp/**'
+      - 'gamecore/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - 'gradlew'
+
+permissions:
+  contents: read
+
+jobs:
+  universal-jar:
+    name: Build universal desktop JAR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build universal JAR
+        run: >-
+          ./gradlew :composeApp:packageUniversalJar
+          --no-daemon --console=plain
+          -PallPlatforms
+          -PupdateRepository="$GITHUB_REPOSITORY"
+
+      - name: Upload universal JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: CactusLauncher-universal-jar
+          path: composeApp/build/compose/universal/CactusLauncher-*-universal.jar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
