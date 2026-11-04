@@ -11,10 +11,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/**
- * Colour tokens. Light values come from the Figma frame. [dark] is snapshot state,
- * so anything that reads a token recomposes when the theme changes.
- */
 object C {
     var dark by mutableStateOf(false)
     var seasonal by mutableStateOf("off")
@@ -24,9 +20,7 @@ object C {
 
     val window get() = pick(0xFFF5F5F7, 0xFF121314)
     val sidebar get() = pick(0xFFFBFBFD, 0xFF17181A)
-    /** Cards, dialogs and other raised panels. */
     val surface get() = pick(0xFFFFFFFF, 0xFF1C1D20)
-    /** Popovers above a surface: dropdown menus, segment thumb. */
     val elevated get() = pick(0xFFFFFFFF, 0xFF2B2D31)
     val segmentThumb get() = pick(0xFFFFFFFF, 0xFF3A3D42)
 
@@ -34,9 +28,7 @@ object C {
     val text2 get() = pick(0xFF6E6E73, 0xFFA0A4AA)
     val text3 get() = pick(0xFF8E8E93, 0xFF878B91)
 
-    /** Accent for text, links, focus and progress. */
     val accent get() = seasonalPick(0xFF0071E3, 0xFF5AA2F7, 0xFF1677C8, 0xFF72B8F5)
-    /** Background of primary buttons; [onAccent] text on it passes WCAG AA in both themes. */
     val accentFill get() = seasonalPick(0xFF0071E3, 0xFF2A72D4, 0xFF1677C8, 0xFF367FC5)
     val onAccent get() = pick(0xFFFFFFFF, 0xFFFFFFFF)
     val accentSoft get() = seasonalPick(0xFFE5F1FC, 0xFF1D2F45, 0xFFE5F4FC, 0xFF203A52)
@@ -48,7 +40,6 @@ object C {
     val toggleOn get() = pick(0xFF34C759, 0xFF2FA84F)
     val toggleOff get() = pick(0xFFD2D2D7, 0xFF484B50)
     val danger get() = pick(0xFFFF3B30, 0xFFFF6B61)
-    /** Destructive text links and error log level. */
     val dangerInk get() = pick(0xFFC62828, 0xFFFF8A80)
     val dangerSoft get() = pick(0xFFFDECEC, 0xFF3A1F1F)
     val success get() = pick(0xFF1F7A3A, 0xFF5CCB7A)
@@ -56,7 +47,6 @@ object C {
     val warningInk get() = pick(0xFFB25E00, 0xFFF0B34A)
     val warningSoft get() = pick(0xFFFFF6E5, 0xFF3A2E17)
     val scrim get() = pick(0x59000000, 0x99000000)
-    /** Snackbar-style notices: inverted in light, a raised gray card in dark. */
     val toast get() = pick(0xFF1D1D1F, 0xFF2E3034)
     val onToast get() = pick(0xFFFFFFFF, 0xFFE8E9EB)
     val selectedGreen get() = pick(0xFFE8F3DD, 0xFF24331F)
@@ -66,7 +56,6 @@ object C {
     val bannerEyebrow get() = if (seasonal == "winter") Color(0xFFB8E1FF) else Color(0xFF99CCFF)
     val bannerText = Color(0xFFEBEBF0)
 
-    // news reader (green) theme
     val readerBg get() = pick(0xFFE8F3E6, 0xFF131C15)
     val readerBar get() = pick(0xFFF4FAF2, 0xFF18221A)
     val readerCard get() = pick(0xFFFFFFFF, 0xFF1D2A20)
@@ -79,7 +68,6 @@ object C {
     val readerBody get() = pick(0xFF27362A, 0xFFD0DCCE)
     val readerMuted get() = pick(0xFF6F8A70, 0xFF8FA88F)
 
-    // swatches used for placeholder icons
     val green = Color(0xFF7FB347)
     val blue = Color(0xFF5E7CE2)
     val sand = Color(0xFFC9A77C)

@@ -28,4 +28,14 @@ class ConflictingSoftwareScannerTest {
         assertFalse(ConflictingSoftwareScanner.is360Security("Google Chrome"));
         assertFalse(ConflictingSoftwareScanner.is360Security(null));
     }
+
+    @Test
+    void onlyYandexBrowserMatches() {
+        assertTrue(ConflictingSoftwareScanner.isYandexBrowser("Yandex Browser"));
+        assertTrue(ConflictingSoftwareScanner.isYandexBrowser("Яндекс Браузер"));
+        assertTrue(ConflictingSoftwareScanner.isYandexBrowser("Яндекс"));
+        assertFalse(ConflictingSoftwareScanner.isYandexBrowser("Yandex Music"));
+        assertFalse(ConflictingSoftwareScanner.isYandexBrowser("360 Total Security"));
+        assertFalse(ConflictingSoftwareScanner.isYandexBrowser(null));
+    }
 }

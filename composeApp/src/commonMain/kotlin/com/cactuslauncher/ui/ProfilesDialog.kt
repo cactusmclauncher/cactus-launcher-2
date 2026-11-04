@@ -41,7 +41,6 @@ fun ProfilesDialog(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val valid = isValidPlayerName(name)
-    // Keyed on ids and names only: changing a picture keeps the edit panel open (bitmaps are never equal between loads).
     LaunchedEffect(snapshot?.let { current -> current.activeId to current.profiles.map { it.id to it.name } }) {
         if (!busy && error == null) { name = ""; editing = null; deleting = null }
     }
@@ -79,7 +78,6 @@ fun ProfilesDialog(
                             T(profile.name, 16, C.text1, FontWeight.Medium, lineHeight = 20)
                             T(if (active) "Активный, офлайн" else "Офлайн-профиль", 12, C.text2, lineHeight = 15)
                         }
-                        // Hidden links keep their space, so "Изменить" and "Удалить" stay in place when the active profile changes.
                         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             T("Выбрать", 13, C.accent, FontWeight.Medium, lineHeight = 16,
                                 modifier = if (active) Modifier.alpha(0f) else Modifier.buttonClickNoRipple { if (!busy) onSelect(profile.id) })

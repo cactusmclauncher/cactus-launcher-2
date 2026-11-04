@@ -13,10 +13,15 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.runtime.remember
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.HoverInteraction
+import androidx.compose.foundation.interaction.FocusInteraction
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.TransformOrigin
@@ -24,6 +29,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collect
 
 @Composable
 fun MotionDropdown(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit) {
@@ -48,26 +54,67 @@ object CactusMotion {
     val easeOut = CubicBezierEasing(0.2f, 0f, 0f, 1f)
     const val quick = 110
     const val normal = 200
-    const val buttonPress = 75
-    const val buttonRelease = 120
     const val buttonScale = 0.98f
+    const val press = 70
+    const val hover = 140
+    const val tactileDamping = 1f
+    const val tactileStiffness = 650f
 }
 
 @Composable
-internal fun rememberButtonPressScale(
+internal fun tactileMotionEnabled(): Boolean =
+    (rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
+
+@Composable
+internal fun rememberTactileScale(target: Float, label: String, engaged: Boolean = false): State<Float> =
+    animateFloatAsState(
+        if (tactileMotionEnabled()) target else 1f,
+        if (engaged) tween(CactusMotion.press, easing = CactusMotion.easeOut)
+        else spring(dampingRatio = CactusMotion.tactileDamping, stiffness = CactusMotion.tactileStiffness),
+        label = label,
+    )
+
+internal data class ControlInteractions(
+    val pressed: Boolean = false,
+    val hovered: Boolean = false,
+    val focused: Boolean = false,
+    val dragged: Boolean = false,
+)
+
+@Composable
+internal fun rememberControlInteractions(
     source: MutableInteractionSource,
     enabled: Boolean,
-): State<Float> {
-    val pressed by source.collectIsPressedAsState()
-    val durationScale = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
-    return animateFloatAsState(
-        if (enabled && pressed && durationScale > 0f) CactusMotion.buttonScale else 1f,
-        tween(if (pressed && enabled) CactusMotion.buttonPress else CactusMotion.buttonRelease, easing = CactusMotion.easeOut),
-        label = "button-press-scale",
-    )
+): State<ControlInteractions> {
+    val state = remember(source, enabled) { mutableStateOf(ControlInteractions()) }
+    LaunchedEffect(source, enabled) {
+        if (!enabled) return@LaunchedEffect
+        val presses = mutableSetOf<PressInteraction.Press>()
+        val hovers = mutableSetOf<HoverInteraction.Enter>()
+        val focuses = mutableSetOf<FocusInteraction.Focus>()
+        val drags = mutableSetOf<DragInteraction.Start>()
+        source.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> presses.add(interaction)
+                is PressInteraction.Release -> presses.remove(interaction.press)
+                is PressInteraction.Cancel -> presses.remove(interaction.press)
+                is HoverInteraction.Enter -> hovers.add(interaction)
+                is HoverInteraction.Exit -> hovers.remove(interaction.enter)
+                is FocusInteraction.Focus -> focuses.add(interaction)
+                is FocusInteraction.Unfocus -> focuses.remove(interaction.focus)
+                is DragInteraction.Start -> drags.add(interaction)
+                is DragInteraction.Stop -> drags.remove(interaction.start)
+                is DragInteraction.Cancel -> drags.remove(interaction.start)
+            }
+            state.value = ControlInteractions(
+                pressed = presses.isNotEmpty(), hovered = hovers.isNotEmpty(),
+                focused = focuses.isNotEmpty(), dragged = drags.isNotEmpty(),
+            )
+        }
+    }
+    return state
 }
 
-/** Keep modal content alive during dismissal so exit animations can finish. */
 @Composable
 fun MotionOverlay(visible: Boolean, content: @Composable () -> Unit) {
     AnimatedVisibility(

@@ -3,6 +3,9 @@ package com.cactuslauncher.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,22 +24,27 @@ import com.cactuslauncher.model.InstallProgress
 import com.cactuslauncher.theme.C
 
 @Composable
-fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused: Boolean, error: String?, onPause: () -> Unit, onCancel: () -> Unit, onRetry: () -> Unit, onClose: () -> Unit, build: com.cactuslauncher.model.LauncherBuild? = null) {
+fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused: Boolean, error: String?, onPause: () -> Unit, onCancel: () -> Unit, onRetry: () -> Unit, onClose: () -> Unit, build: com.cactuslauncher.model.LauncherBuild? = null,
+    stages: List<String> = listOf("Клиент Minecraft", "Библиотеки", "Ресурсы и звуки"),
+    completedText: String = "Сборка скачана", allowPause: Boolean = true,
+) {
     val fraction by animateFloatAsState(progress.fraction.coerceIn(0f, 1f), tween(200, easing = CactusMotion.easeOut), label = "installation-progress")
     val close = if (busy) onCancel else onClose
-    val finished = !busy && error == null
+    val finished = !busy && error == null && progress.fraction >= 1f
     Modal(close, height = 520.dp) {
         Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (build != null) InstanceArtwork(build, Modifier.size(64.dp)) else BuildArtwork(name, C.green, Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     T(name, 22, C.text1, FontWeight.SemiBold, lineHeight = 27, maxLines = 1)
                     T(when {
                         paused -> "Загрузка приостановлена"
-                        !busy -> if (error == null) "Сборка скачана" else "Загрузка остановлена"
+                        finished -> completedText
+                        !busy && error != null -> "Загрузка остановлена"
                         progress.total > 0 -> "Загрузка файлов, ${progress.completed} из ${progress.total}"
                         else -> progress.stage
-                    }, 14, C.text2, lineHeight = 17, maxLines = 2)
+                    }, 14, C.text2, lineHeight = 20)
                 }
                 Box(Modifier.size(44.dp).clip(CircleShape).background(C.fill).buttonClickNoRipple(close), contentAlignment = Alignment.Center) {
                     T("✕", 14, C.text2, FontWeight.Medium, lineHeight = 17)
@@ -63,7 +71,7 @@ fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused
                 }
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.window).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf("Клиент Minecraft", "Библиотеки", "Ресурсы и звуки").forEachIndexed { index, label ->
+                stages.forEachIndexed { index, label ->
                     val done = finished || progress.phase > index
                     val active = busy && progress.total > 0 && progress.phase == index
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -74,19 +82,19 @@ fun InstallDialog(name: String, progress: InstallProgress, busy: Boolean, paused
                     }
                 }
             }
-            if (error != null) T(error, 13, C.danger, lineHeight = 18, maxLines = 2)
-            Spacer(Modifier.weight(1f))
+            if (error != null) SelectionContainer { T(error, 14, C.dangerInk, lineHeight = 20, modifier = Modifier.fillMaxWidth()) }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.window).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                T("Файл:", 12, C.text2, FontWeight.Medium, lineHeight = 15)
+                T(progress.lastFile.ifBlank { "Ожидание загрузки" }, 12, C.text1, lineHeight = 15, modifier = Modifier.weight(1f))
+            }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.clip(CircleShape).background(C.fill).buttonClickNoRipple(close).padding(horizontal = 24.dp, vertical = 12.dp)) {
                     T(if (busy) "Отмена" else "Закрыть", 15, C.text1, FontWeight.Medium, lineHeight = 18)
                 }
-                if (busy || error != null) Box(Modifier.clip(CircleShape).background(C.accentFill).buttonClickNoRipple(if (busy) onPause else onRetry).padding(horizontal = 24.dp, vertical = 12.dp)) {
+                if ((busy && allowPause) || error != null) Box(Modifier.clip(CircleShape).background(C.accentFill).buttonClickNoRipple(if (busy) onPause else onRetry).padding(horizontal = 24.dp, vertical = 12.dp)) {
                     T(if (!busy) "Повторить" else if (paused) "Продолжить" else "Пауза", 15, C.onAccent, FontWeight.Medium, lineHeight = 18)
                 }
-            }
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.window).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                T("Файл:", 12, C.text2, FontWeight.Medium, lineHeight = 15)
-                T(progress.lastFile.ifBlank { "Ожидание загрузки" }, 12, C.text1, lineHeight = 15, maxLines = 1, modifier = Modifier.weight(1f))
             }
         }
     }

@@ -71,6 +71,7 @@ fun Sidebar(
     trackPosition: () -> Double = { currentTrack?.positionSeconds?.toDouble() ?: 0.0 },
     onSeek: (Int) -> Unit = {},
     winterBackground: Boolean = false,
+    horizonEnabled: Boolean = false,
 ) {
     val paneWidth by animateDpAsState(if (playerExpanded) 340.dp else 240.dp, tween(220, easing = CactusMotion.easeOut), label = "player-pane")
     Column(
@@ -97,7 +98,7 @@ fun Sidebar(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Dest.entries.forEach { dest ->
+            Dest.entries.filter { horizonEnabled || it != Dest.Horizon }.forEach { dest ->
                 NavItem(dest.label, dest == current) { onSelect(dest) }
             }
         }
@@ -212,7 +213,6 @@ private fun PlayerPopup(
         }
         val duration = track?.durationSeconds ?: 0
         val playing = track?.isPlaying == true
-        // Redraw a few times a second while playing so the bar moves between polls.
         var tick by remember { mutableIntStateOf(0) }
         LaunchedEffect(playing) { while (playing) { delay(100); tick++ } }
         var dragFraction by remember { mutableStateOf<Float?>(null) }
@@ -253,10 +253,6 @@ private fun PlayerPopup(
     }
 }
 
-/**
- * The 4 dp progress bar; click or drag it to seek, the position is applied on release. The bar keeps its 4 dp in the
- * layout while the pointer area around it is 16 dp tall, and a small thumb shows only while hovering or dragging.
- */
 @Composable
 private fun SeekBar(
     fraction: Float,

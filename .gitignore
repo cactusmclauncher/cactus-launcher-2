@@ -17,6 +17,7 @@ local.properties
 nohup.out
 session-*.md
 AGENTS.md
+/messages/
 
 # Бэкапы патчей
 *.orig

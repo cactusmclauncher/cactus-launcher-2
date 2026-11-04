@@ -307,7 +307,6 @@ internal fun BuildPicker(
     }
 }
 
-/** "1 проблема", "3 проблемы", "5 проблем". */
 private fun problemsCount(count: Int): String {
     val word = when {
         count % 100 in 11..14 -> "проблем"
@@ -318,7 +317,6 @@ private fun problemsCount(count: Int): String {
     return "$count $word"
 }
 
-/** "1 мод", "3 мода", "11 модов": Russian plural for mod counts. */
 private fun modsCount(count: Int): String {
     val word = when {
         count % 100 in 11..14 -> "модов"
@@ -363,7 +361,6 @@ private fun InstalledModRow(
                 update != null -> T("${mod.version.ifBlank { mod.fileName }} → ${update.newVersion}", 12, C.text2, lineHeight = 15, maxLines = 1)
                 else -> T(if (mod.version.isBlank()) mod.fileName else "${mod.version} (${mod.fileName})", 12, C.text2, lineHeight = 15, maxLines = 1)
             }
-            // One line per mod: the most serious problem, a count of the rest, and "Установить" for a missing mod.
             problems.firstOrNull()?.takeIf { !confirmingRemove && !askUpdate }?.let { problem ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     val rest = if (problems.size > 1) " · ещё ${problems.size - 1}" else ""
@@ -392,10 +389,6 @@ private fun InstalledModRow(
     }
 }
 
-/**
- * Count on the left; on the right "Проверить обновления" (re-reads the folder and checks Modrinth) and, only when
- * updates exist, "Обновить всё (N)". New dependencies are confirmed in place, like removing a mod.
- */
 @Composable
 private fun InstalledHeader(
     title: String,

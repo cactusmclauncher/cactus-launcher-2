@@ -9,24 +9,26 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Startup check for security software that conflicts with the launcher; removal is always user-consented. */
+/** Startup check for software that conflicts with the launcher; force-removal is always user-consented. */
 class SecurityState(
     private val game: GameService,
     private val scope: CoroutineScope,
     private val messages: AppMessages,
 ) {
-    var threat by mutableStateOf<ConflictingSoftware?>(null)
+    var threats by mutableStateOf<List<ConflictingSoftware>>(emptyList())
     var visible by mutableStateOf(false)
-    var busy by mutableStateOf(false)
+    var busyIds by mutableStateOf<Set<String>>(emptySet())
+    var removedIds by mutableStateOf<Set<String>>(emptySet())
     private var checked = false
+    private var pending = 0
 
     suspend fun check() {
         if (checked) return
         checked = true
         try {
             val found = game.detectConflictingSoftware()
-            threat = found
-            if (found != null) visible = true
+            threats = found
+            if (found.isNotEmpty()) visible = true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -38,30 +40,35 @@ class SecurityState(
         visible = false
     }
 
-    fun uninstall() {
-        if (busy) return
-        val found = threat ?: return
-        if (!found.uninstallable) {
-            messages.notice = "Автоматическое удаление недоступно. Удалите ${found.name} через «Программы и компоненты»."
-            return
-        }
-        busy = true
+    fun removeAll() {
+        threats.map { it.id }.filter { it !in removedIds && it !in busyIds }.forEach(::remove)
+    }
+
+    fun remove(id: String) {
+        if (id in busyIds || id in removedIds) return
+        val found = threats.firstOrNull { it.id == id } ?: return
+        busyIds = busyIds + id
+        pending++
         scope.launch {
             try {
-                val started = game.uninstallConflictingSoftware()
-                messages.notice = if (started) {
-                    "Запущен деинсталлятор ${found.name}. Подтвердите удаление в его окне."
+                val removed = game.forceRemoveConflictingSoftware(id)
+                if (removed) removedIds = removedIds + id
+                messages.notice = if (removed) {
+                    "${found.name} удалён."
                 } else {
-                    "Не удалось запустить деинсталлятор ${found.name}. Удалите программу вручную."
+                    "Не удалось удалить ${found.name}. Возможно, нужны права администратора."
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                messages.failure("uninstall-conflicting-software", "Не удалось удалить ${found.name}.", e)
+                messages.failure("force-remove-conflicting-software", "Не удалось удалить ${found.name}.", e)
             } finally {
-                busy = false
-                visible = false
-                threat = null
+                busyIds = busyIds - id
+                pending--
+                if (pending <= 0) {
+                    pending = 0
+                    visible = false
+                }
             }
         }
     }

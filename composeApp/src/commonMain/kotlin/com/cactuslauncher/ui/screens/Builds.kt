@@ -63,7 +63,7 @@ import com.cactuslauncher.model.BuildSnapshot
 import com.cactuslauncher.model.JavaOptimizationPlan
 import com.cactuslauncher.model.JavaOptimizationInfo
 import com.cactuslauncher.ui.MemoryWarning
-import com.cactuslauncher.ui.SliderThumb
+import com.cactuslauncher.ui.MemoryControl
 import com.cactuslauncher.model.InstalledResourcePack
 import androidx.compose.foundation.layout.Spacer
 import kotlinx.coroutines.delay
@@ -368,10 +368,7 @@ private fun ColumnScope.BuildSettingsTab(build: LauncherBuild, busy: Boolean, me
                 }
                 val shownMemoryGb = if (automaticMemory) javaPlan?.heapGb ?: memoryGb else memoryGb
                 val maxMemoryGb = (javaOptimizationInfo?.maxMemoryGb ?: 16).coerceIn(2, 16)
-                val memorySpan = (maxMemoryGb - 2).coerceAtLeast(1)
-                MemorySlider(((shownMemoryGb - 2).toFloat() / memorySpan).coerceIn(0f, 1f)) {
-                    onMemoryChange((2 + it * memorySpan).toInt().coerceIn(2, maxMemoryGb))
-                }
+                MemoryControl(shownMemoryGb, onMemoryChange, maxGb = maxMemoryGb, enabled = !busy)
                 javaOptimizationInfo?.let { info -> MemoryWarning(shownMemoryGb, info) }
             }
             Row(
@@ -495,39 +492,3 @@ private fun SettingRow(
     }
 }
 
-@Composable
-private fun MemorySlider(value: Float, onChange: (Float) -> Unit) {
-    var width by remember { mutableFloatStateOf(1f) }
-    val latestChange by rememberUpdatedState(onChange)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(24.dp)
-            .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
-            .pointerInput(Unit) {
-                detectTapGestures { latestChange((it.x / width).coerceIn(0f, 1f)) }
-            }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures { change, _ ->
-                    latestChange((change.position.x / width).coerceIn(0f, 1f))
-                }
-            },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(C.track),
-        )
-        Box(
-            Modifier
-                .fillMaxWidth(value.coerceIn(0f, 1f))
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(C.accent),
-        )
-        SliderThumb(value, width)
-    }
-}

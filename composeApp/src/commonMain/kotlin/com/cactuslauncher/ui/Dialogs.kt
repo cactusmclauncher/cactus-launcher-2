@@ -79,7 +79,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
-/** [width] above the default lets the dialog shrink with the window; [onKey] sees key presses before Esc closes. */
 fun Modal(
     onDismiss: () -> Unit,
     compact: Boolean = false,
@@ -303,7 +302,6 @@ fun SettingsDialog(
                 Modifier
                     .drawWithContent {
                         drawContent()
-                        // Fade at the bottom shows that the list continues below on short windows.
                         if (settingsScroll.canScrollForward) {
                             val fade = 40.dp.toPx()
                             drawRect(Brush.verticalGradient(listOf(C.surface.copy(alpha = 0f), C.surface), startY = size.height - fade, endY = size.height),
@@ -329,6 +327,13 @@ fun SettingsDialog(
                         AnimatedSegments(listOf("Авто", "Выключено", "Зимнее"), seasonalThemes.indexOf(settings.seasonalTheme).coerceAtLeast(0),
                             { settings.seasonalTheme = seasonalThemes[it] }, fill = C.fill)
                     }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    T("Бета-функции", 13, C.text2, lineHeight = 16)
+                    GameRow("Horizon") {
+                        Switch(settings.horizonEnabled) { settings.horizonEnabled = it }
+                    }
+                    T("Показывать Horizon в боковой панели", 12, C.text2, lineHeight = 17)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     T("Скачивание", 13, C.text2, lineHeight = 16)

@@ -86,6 +86,15 @@ fun App(game: GameService, onGhostMode: () -> Unit, onBringToFront: () -> Unit =
     val navigation = remember { NavigationState() }
     val settings = remember { PreferencesState(game, messages) }
     val preferences = settings.preferences
+    val horizon = remember(game) { com.cactuslauncher.state.HorizonState(game, scope) }
+    LaunchedEffect(settings.settingsReady, settings.firstSetupOpen, preferences.horizonEnabled, preferences.horizonAutoUpdate) {
+        if (!preferences.horizonEnabled) {
+            horizon.disabled()
+            if (navigation.dest == Dest.Horizon) navigation.dest = Dest.Home
+        } else if (settings.settingsReady && !settings.firstSetupOpen) {
+            horizon.startup(preferences.horizonAutoUpdate)
+        }
+    }
     var automaticSeasonalTheme by remember(game) { mutableStateOf(game.automaticSeasonalTheme()) }
     val seasonalTheme = preferences.resolvedSeasonalTheme(automaticSeasonalTheme)
     LaunchedEffect(game) {
@@ -268,6 +277,7 @@ fun App(game: GameService, onGhostMode: () -> Unit, onBringToFront: () -> Unit =
                     trackPosition = player::position,
                     onSeek = player::seek,
                     winterBackground = winterBackground,
+                    horizonEnabled = preferences.horizonEnabled,
                 )
                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                     if (navigation.readingNews) {
@@ -283,6 +293,7 @@ fun App(game: GameService, onGhostMode: () -> Unit, onBringToFront: () -> Unit =
                         }, label = "navigation",
                     ) { (route, buildDetail, logsId) ->
                         when (route) {
+                            Dest.Horizon -> com.cactuslauncher.ui.HorizonSettings(horizon, preferences, profiles.profiles?.active?.name)
                             Dest.Home -> HomeScreen(
                                 builds = builds.builds,
                                 onOpenBuilds = {
@@ -465,6 +476,27 @@ fun App(game: GameService, onGhostMode: () -> Unit, onBringToFront: () -> Unit =
                 }
             }
 
+            MotionOverlay(preferences.horizonEnabled && horizon.installOpen) {
+                com.cactuslauncher.ui.InstallDialog(
+                    name = "Horizon",
+                    progress = com.cactuslauncher.model.InstallProgress(
+                        fraction = horizon.installProgress.fraction,
+                        stage = horizon.installProgress.message,
+                        lastFile = horizon.installProgress.message,
+                        phase = horizon.installPhase,
+                    ),
+                    busy = horizon.busy,
+                    paused = false,
+                    error = horizon.error,
+                    onPause = {},
+                    onCancel = horizon::cancel,
+                    onRetry = horizon::install,
+                    onClose = horizon::closeInstall,
+                    stages = listOf("Horizon", "Minecraft, Java и ресурсы", "Проверка файлов"),
+                    completedText = "Готов к игре офлайн",
+                    allowPause = false,
+                )
+            }
             MotionOverlay(navigation.newBuildOpen) {
                 NewBuildDialog(
                     game = game,
@@ -515,14 +547,14 @@ fun App(game: GameService, onGhostMode: () -> Unit, onBringToFront: () -> Unit =
                 )
             }
             MotionOverlay(security.visible) {
-                security.threat?.let { threat ->
-                    SecurityNoticeDialog(
-                        threat = threat,
-                        busy = security.busy,
-                        onDismiss = { security.dismiss() },
-                        onUninstall = { security.uninstall() },
-                    )
-                }
+                SecurityNoticeDialog(
+                    threats = security.threats,
+                    busyIds = security.busyIds,
+                    removedIds = security.removedIds,
+                    onDismiss = { security.dismiss() },
+                    onRemove = { security.remove(it) },
+                    onRemoveAll = { security.removeAll() },
+                )
             }
             MotionOverlay(profiles.open) { ProfilesDialog(
                 snapshot = profiles.profiles, busy = profiles.busy, error = profiles.error,

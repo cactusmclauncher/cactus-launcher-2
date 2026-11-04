@@ -67,13 +67,8 @@ import com.cactuslauncher.ui.clickNoRipple
 import com.cactuslauncher.ui.softShadow
 import kotlinx.coroutines.CancellationException
 
-/** One entry of the "Остальное" menu: the section, its picture and a line with live numbers. */
 private class OtherEntry(val section: OtherSection, val description: String, val image: @Composable (Modifier) -> Unit)
 
-/**
- * "Остальное": a menu of sections (rows in the build list style); a section opens full screen with
- * "← Остальное" above its title. Esc goes back to the menu.
- */
 @Composable
 fun OtherScreen(
     builds: List<LauncherBuild>,
@@ -82,7 +77,6 @@ fun OtherScreen(
     onOpenSection: (OtherSection?) -> Unit,
     overview: OtherOverview?,
     shotThumbnail: suspend (buildId: String, Screenshot) -> ImageBitmap?,
-    /** A dialog above the screen (the screenshot viewer) handles keys itself. */
     overlayOpen: Boolean,
     screenshots: ScreenshotsSectionState,
     servers: ServersSectionState,
@@ -101,7 +95,6 @@ fun OtherScreen(
         if (current == null) OtherMenu(otherEntries(overview, shotThumbnail)) { onOpenSection(it) }
         else {
             val focus = remember { FocusRequester() }
-            // Back to the section after the viewer closes or the server form (which had focus) goes away.
             LaunchedEffect(overlayOpen, servers.form == null) { if (!overlayOpen) runCatching { focus.requestFocus() } }
             Column(
                 Modifier.fillMaxSize().focusRequester(focus).onKeyEvent {
@@ -123,7 +116,6 @@ fun OtherScreen(
     }
 }
 
-/** New sections add an entry here (and a branch in [OtherScreen]). */
 private fun otherEntries(overview: OtherOverview?, shotThumbnail: suspend (String, Screenshot) -> ImageBitmap?) = listOf(
     OtherEntry(
         OtherSection.Screenshots,
@@ -168,7 +160,6 @@ private fun OtherMenu(entries: List<OtherEntry>, onOpen: (OtherSection) -> Unit)
     }
 }
 
-/** The newest screenshot of any build, or a painting item while there is none. */
 @Composable
 private fun LatestShotImage(latest: Pair<String, Screenshot>?, thumbnail: suspend (String, Screenshot) -> ImageBitmap?, modifier: Modifier) {
     val image by produceState<ImageBitmap?>(null, latest) {
@@ -181,7 +172,6 @@ private fun LatestShotImage(latest: Pair<String, Screenshot>?, thumbnail: suspen
     else PixelIcon(Res.drawable.icon_painting, "Скриншоты", modifier)
 }
 
-/** What the screenshots section shows and does; App wires it to ScreenshotsState and GameService. */
 class ScreenshotsSectionState(
     val selectedBuildId: String?,
     val shots: List<Screenshot>,
@@ -265,10 +255,6 @@ private fun ScreenshotCard(shot: Screenshot, buildId: String, thumbnail: suspend
     }
 }
 
-/**
- * The open screenshot in the dialog style of the app: ←/→ switch, Esc closes; actions are text links and
- * deleting asks inline, as removing a mod does.
- */
 @Composable
 fun ScreenshotViewer(
     shot: Screenshot,
@@ -344,10 +330,8 @@ private fun ViewerLink(label: String, busy: Boolean, onClick: () -> Unit) {
         modifier = if (busy) Modifier else Modifier.buttonClickNoRipple(onClick))
 }
 
-/** "в 1 сборке", "в 3 сборках". */
 private fun buildsCount(count: Int) = "$count " + if (count % 10 == 1 && count % 100 != 11) "сборке" else "сборках"
 
-/** "1 скриншот", "3 скриншота", "11 скриншотов". */
 private fun screenshotsCount(count: Int): String {
     val word = when {
         count % 100 in 11..14 -> "скриншотов"

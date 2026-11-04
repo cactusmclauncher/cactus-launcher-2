@@ -46,10 +46,8 @@ import com.cactuslauncher.ui.T
 import com.cactuslauncher.ui.buttonClickNoRipple
 import com.cactuslauncher.ui.softShadow
 
-/** What the servers section shows and does; App wires it to ServersState. */
 class ServersSectionState(
     val selectedBuildId: String?,
-    /** Visible entries of servers.dat (hidden ones stay in the file). */
     val servers: List<MinecraftServer>,
     val pings: Map<String, ServerPingState>,
     val loading: Boolean,
@@ -57,7 +55,6 @@ class ServersSectionState(
     val error: String?,
     val form: ServerForm?,
     val busy: Boolean,
-    /** A launch is in progress or the selected build is already running. */
     val playBlocked: Boolean,
     val onSelectBuild: (LauncherBuild) -> Unit,
     val onRefresh: () -> Unit,
@@ -177,7 +174,6 @@ private fun ServerRow(server: MinecraftServer, ping: ServerPingState?, state: Se
     }
 }
 
-/** Adding or editing in place: name and address fields, Enter saves, Esc cancels. */
 @Composable
 private fun ServerFormCard(form: ServerForm, state: ServersSectionState) {
     Column(
@@ -222,7 +218,6 @@ private fun PillButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** "1 сервер", "3 сервера", "11 серверов". */
 internal fun serversCount(count: Int): String {
     val word = when {
         count % 100 in 11..14 -> "серверов"

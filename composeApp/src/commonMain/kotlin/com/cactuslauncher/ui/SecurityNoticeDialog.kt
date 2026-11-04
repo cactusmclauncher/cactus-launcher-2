@@ -19,10 +19,12 @@ import com.cactuslauncher.theme.C
 
 @Composable
 fun SecurityNoticeDialog(
-    threat: ConflictingSoftware,
-    busy: Boolean,
+    threats: List<ConflictingSoftware>,
+    busyIds: Set<String>,
+    removedIds: Set<String>,
     onDismiss: () -> Unit,
-    onUninstall: () -> Unit,
+    onRemove: (String) -> Unit,
+    onRemoveAll: () -> Unit,
 ) {
     Modal(onDismiss = onDismiss, height = 440.dp, width = 520.dp, wrapHeight = true) {
         Column(
@@ -32,16 +34,23 @@ fun SecurityNoticeDialog(
             T("Проверка безопасности", 22, C.text1, FontWeight.SemiBold, lineHeight = 27)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 T("Обнаружено несовместимое ПО", 16, C.text1, FontWeight.SemiBold, lineHeight = 20)
-                T("${threat.name} может блокировать файлы лаунчера, моды и запуск игры. ${threat.detail}", 14, C.text2, lineHeight = 20)
+                T("Эти программы могут блокировать файлы лаунчера, моды и запуск игры.", 14, C.text2, lineHeight = 20)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                threats.forEach { threat ->
+                    ThreatRow(
+                        threat = threat,
+                        busy = threat.id in busyIds,
+                        removed = threat.id in removedIds,
+                        onRemove = { onRemove(threat.id) },
+                    )
+                }
             }
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.warningSoft).padding(14.dp),
             ) {
                 T(
-                    if (threat.uninstallable)
-                        "Удаление запустит официальный деинсталлятор. Windows может запросить права администратора."
-                    else
-                        "Автоматическое удаление недоступно. Удалите программу через «Программы и компоненты».",
+                    "Удаление снесёт программу без официального деинсталлятора: процессы, папки, службы, ярлыки и записи реестра. Windows может запросить права администратора.",
                     13, C.warningInk, lineHeight = 18,
                 )
             }
@@ -54,15 +63,47 @@ fun SecurityNoticeDialog(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill)
                         .buttonClickNoRipple(onDismiss).padding(horizontal = 18.dp, vertical = 11.dp),
                 ) { T("Оставить", 14, C.text1, FontWeight.Medium, lineHeight = 18) }
-                Box(
-                    Modifier.clip(RoundedCornerShape(999.dp))
-                        .background(if (busy || !threat.uninstallable) C.fill else C.danger)
-                        .buttonClickNoRipple(enabled = !busy && threat.uninstallable, onClick = onUninstall)
-                        .padding(horizontal = 18.dp, vertical = 11.dp),
-                ) {
-                    T(if (busy) "Запускаем..." else "Удалить", 14, if (busy || !threat.uninstallable) C.text2 else C.onAccent, FontWeight.Medium, lineHeight = 18)
+                if (threats.any { it.id !in removedIds }) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(999.dp)).background(C.fill)
+                            .buttonClickNoRipple(enabled = busyIds.isEmpty(), onClick = onRemoveAll)
+                            .padding(horizontal = 18.dp, vertical = 11.dp),
+                    ) { T("Удалить всё", 14, C.text1, FontWeight.Medium, lineHeight = 18) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ThreatRow(
+    threat: ConflictingSoftware,
+    busy: Boolean,
+    removed: Boolean,
+    onRemove: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(C.fill)
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            T(threat.name, 14, C.text1, FontWeight.SemiBold, lineHeight = 18)
+            T(threat.detail, 12, C.text2, lineHeight = 16)
+        }
+        Box(
+            Modifier.clip(RoundedCornerShape(999.dp))
+                .background(if (busy || removed) C.fill else C.danger)
+                .buttonClickNoRipple(enabled = !busy && !removed, onClick = onRemove)
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+        ) {
+            T(
+                if (busy) "Удаляем..." else if (removed) "Удалено" else "Удалить",
+                13, if (busy || removed) C.text2 else C.onAccent, FontWeight.Medium, lineHeight = 16,
+            )
         }
     }
 }

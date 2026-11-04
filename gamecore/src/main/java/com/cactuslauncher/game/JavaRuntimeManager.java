@@ -14,8 +14,11 @@ import java.util.zip.ZipInputStream;
 public final class JavaRuntimeManager {
     private final Path root;
     private final DownloadControl control;
+    private final boolean jdk;
     public JavaRuntimeManager(Path root) { this(root, new DownloadControl()); }
-    public JavaRuntimeManager(Path root, DownloadControl control) { this.root = root.toAbsolutePath().normalize(); this.control = control; }
+    public JavaRuntimeManager(Path root, DownloadControl control) { this(root, control, false); }
+    private JavaRuntimeManager(Path root, DownloadControl control, boolean jdk) { this.root = root.toAbsolutePath().normalize(); this.control = control; this.jdk = jdk; }
+    public Path ensureJdk(int major, Consumer<String> progress) throws IOException { return new JavaRuntimeManager(root, control, true).ensure(major, progress); }
 
     /** One lock per runtime folder, shared by every manager instance, so parallel installs and launches never race on it. */
     private static final java.util.concurrent.ConcurrentHashMap<Path, Object> LOCKS = new java.util.concurrent.ConcurrentHashMap<>();
@@ -26,7 +29,7 @@ public final class JavaRuntimeManager {
 
     public Path ensure(int major, Consumer<String> progress, String architectureOverride) throws IOException {
         String architecture = architectureOverride != null ? architectureOverride : System.getProperty("os.arch", "");
-        Object lock = LOCKS.computeIfAbsent(root.resolve(major + "-" + architecture), key -> new Object());
+        Object lock = LOCKS.computeIfAbsent(root.resolve(major + "-" + architecture + (jdk ? "-jdk" : "")), key -> new Object());
         synchronized (lock) {
             try { return ensureProvider(major, progress, false, architectureOverride); }
             catch (InterruptedIOException e) {
@@ -52,7 +55,7 @@ public final class JavaRuntimeManager {
         String arch = architectureOverride != null ? architectureOverride : architecture.equals("aarch64") || architecture.equals("arm64") ? "aarch64" : architecture.equals("amd64") || architecture.equals("x86_64") ? "x64" : "";
         if (!arch.equals("aarch64") && !arch.equals("x64"))
             throw new IOException("Неподдерживаемая архитектура Java: " + (arch.isEmpty() ? architecture : arch));
-        Path destination = root.resolve(major + "-" + os + "-" + arch);
+        Path destination = root.resolve(major + "-" + os + "-" + arch + (jdk ? "-jdk" : ""));
         if (Files.isSymbolicLink(root) || Files.isSymbolicLink(destination)) throw new IOException("Папка Java не должна быть символической ссылкой.");
         if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
             Path existing = existingRuntime(destination, major);
@@ -62,7 +65,7 @@ public final class JavaRuntimeManager {
         Files.createDirectories(root);
         progress.accept("Поиск портативной Java " + major);
         var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NORMAL).build();
-        String url = "https://api.adoptium.net/v3/assets/latest/" + major + "/hotspot?architecture=" + arch + "&image_type=jre&os=" + os + "&vendor=eclipse";
+        String url = "https://api.adoptium.net/v3/assets/latest/" + major + "/hotspot?architecture=" + arch + "&image_type=" + (jdk ? "jdk" : "jre") + "&os=" + os + "&vendor=eclipse";
         Path staging = Files.createTempDirectory(root, "java-staging-");
         try {
             var assets = new com.google.gson.JsonArray();

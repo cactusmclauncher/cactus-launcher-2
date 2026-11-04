@@ -292,13 +292,17 @@ public final class VersionInstaller {
         if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Скачивание отменено.");
     }
 
-    private static String os() {
+    static String os() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         return os.contains("mac") ? "osx" : os.contains("win") ? "windows" : "linux";
     }
 
     static String nativeClassifier(String template, JsonObject classifiers, boolean preferX64) {
-        String architecture = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+        return nativeClassifier(template, classifiers, preferX64, System.getProperty("os.arch", ""));
+    }
+
+    static String nativeClassifier(String template, JsonObject classifiers, boolean preferX64, String runtimeArchitecture) {
+        String architecture = runtimeArchitecture.toLowerCase(Locale.ROOT);
         boolean arm = architecture.equals("aarch64") || architecture.equals("arm64");
         String preferredArch = arm ? (preferX64 ? "64" : "arm64") : architecture.contains("64") ? "64" : "32";
         String preferred = template.replace("${arch}", preferredArch);
@@ -311,6 +315,10 @@ public final class VersionInstaller {
     }
 
     static boolean allowed(JsonObject library) {
+        return allowed(library, os(), System.getProperty("os.arch", ""), System.getProperty("os.version", ""));
+    }
+
+    static boolean allowed(JsonObject library, String operatingSystem, String architecture, String osVersion) {
         if (!library.has("rules")) return true;
         boolean allowed = false;
         for (var item : library.getAsJsonArray("rules")) {
@@ -318,9 +326,9 @@ public final class VersionInstaller {
             boolean matches = !rule.has("features");
             if (rule.has("os")) {
                 var platform = rule.getAsJsonObject("os");
-                if (platform.has("name")) matches &= platform.get("name").getAsString().equals(os());
-                if (platform.has("arch")) matches &= System.getProperty("os.arch").matches(platform.get("arch").getAsString());
-                if (platform.has("version")) matches &= System.getProperty("os.version").matches(platform.get("version").getAsString());
+                if (platform.has("name")) matches &= platform.get("name").getAsString().equals(operatingSystem);
+                if (platform.has("arch")) matches &= architecture.matches(platform.get("arch").getAsString());
+                if (platform.has("version")) matches &= osVersion.matches(platform.get("version").getAsString());
             }
             if (matches) allowed = rule.get("action").getAsString().equals("allow");
         }

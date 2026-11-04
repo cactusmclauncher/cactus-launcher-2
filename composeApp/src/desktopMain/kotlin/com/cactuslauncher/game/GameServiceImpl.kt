@@ -33,6 +33,28 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
     private val profileStore = ProfileStore(ProfileStore.defaultFile())
     private val preferencesStore = LauncherPreferencesStore(ProfileStore.defaultFile().resolveSibling("settings.properties"))
     private val releaseUpdater = GithubReleaseUpdater()
+    private val horizon = HorizonInstaller(ProfileStore.defaultFile().resolveSibling("horizon"))
+    override suspend fun launchHorizon(onRunning: (String) -> Unit) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        val result = horizon.launch(profileStore, onRunning)
+        HorizonExit(result.exitCode(), result.logPath())
+    }
+    private fun HorizonInstaller.Installation.uiHorizon() = HorizonInstallation(release(), minecraft(), javaMajor(), path(), minecraftPath())
+    override suspend fun horizonInstallation() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) { horizon.installed()?.uiHorizon() }
+    override suspend fun installHorizon(onProgress: (HorizonProgress) -> Unit) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        horizon.install { onProgress(HorizonProgress(it.message(), it.fraction())) }.uiHorizon()
+    }
+    override suspend fun validateHorizonMinecraft(path: String) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) { horizon.validateMinecraft(path) }
+    override suspend fun horizonPrepared() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) { horizon.prepared() }
+    override suspend fun horizonMinecraftSource() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) { horizon.suggestedMinecraft() }
+    override suspend fun horizonJavaHome() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) { horizon.javaHome() }
+    override suspend fun rollbackHorizon() = kotlinx.coroutines.runInterruptible(Dispatchers.IO) { horizon.rollback().uiHorizon() }
+    override suspend fun checkHorizonUpdate(automatic: Boolean, onProgress: (HorizonProgress) -> Unit) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        val update = horizon.checkUpdate(automatic) { onProgress(HorizonProgress(it.message(), it.fraction())) }
+        HorizonUpdate(update.installation()?.uiHorizon(), update.latest(), update.available(), update.status())
+    }
+    override suspend fun prepareHorizon(path: String, javaHome: String, onProgress: (HorizonProgress) -> Unit) = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        horizon.prepare(path, javaHome) { onProgress(HorizonProgress(it.message(), it.fraction())) }
+    }
     private val buildStore = BuildStore(ProfileStore.defaultFile().resolveSibling("builds.properties"))
     private fun List<BuildStore.Build>.uiBuilds() = map {
         val folder = buildStore.folder(it.id())
@@ -336,12 +358,12 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
         BuildFolders.open(resourcePackStore.folder(buildStore.folder(id)))
     }
     override suspend fun detectConflictingSoftware() = withContext(Dispatchers.IO) {
-        ConflictingSoftwareScanner.detect()?.let {
-            com.cactuslauncher.model.ConflictingSoftware(it.name(), it.detail(), it.uninstallable())
+        ConflictingSoftwareScanner.detectAll().map {
+            com.cactuslauncher.model.ConflictingSoftware(it.id(), it.name(), it.detail())
         }
     }
-    override suspend fun uninstallConflictingSoftware() = withContext(Dispatchers.IO) {
-        ConflictingSoftwareScanner.uninstall()
+    override suspend fun forceRemoveConflictingSoftware(id: String) = withContext(Dispatchers.IO) {
+        ConflictingSoftwareScanner.forceRemove(id)
     }
     override suspend fun loadPreferences() = withContext(Dispatchers.IO) {
         preferencesStore.load()?.let {
@@ -352,6 +374,7 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
                  it.translateModDescriptions(), it.modAntivirusEnabled(), it.resolution(), it.folder(), it.theme(), it.seasonalTheme(),
 
                 it.launcherMusic(), it.menuMusicPack(), it.playerMode(), it.radioEnabled(), it.ghostModeIntroSeen(),
+                it.horizonEnabled(), it.horizonAutoUpdate(),
             )
         }
     }
@@ -362,6 +385,7 @@ class GameServiceImpl(private val core: GameCore = GameCore()) : GameService {
             value.autoJavaOptimization, value.ghostMode, value.fullscreen, value.autoUpdate, value.advancedMode,
              value.translateModDescriptions, value.modAntivirusEnabled, value.resolution, value.folder, value.theme,
              value.seasonalTheme, value.launcherMusic, value.menuMusicPack, value.playerMode, value.radioEnabled, value.ghostModeIntroSeen,
+             value.horizonEnabled, value.horizonAutoUpdate,
 
         ))
     }

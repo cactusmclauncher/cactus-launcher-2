@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.cactuslauncher.model.LauncherPreferencesSnapshot
 
-/** UI preferences retained while navigating and reopening dialogs. */
 class LauncherSettings(gameDir: String) {
     var showPlayer by mutableStateOf(true)
     var parallelDownloads by mutableIntStateOf(4)
@@ -28,6 +27,8 @@ class LauncherSettings(gameDir: String) {
     var playerMode by mutableStateOf("external")
     var radioEnabled by mutableStateOf(false)
     var ghostModeIntroSeen by mutableStateOf(false)
+    var horizonEnabled by mutableStateOf(false)
+    var horizonAutoUpdate by mutableStateOf(false)
 
     fun resolvedSeasonalTheme(automaticTheme: String): String =
         if (seasonalTheme == "auto") automaticTheme else seasonalTheme
@@ -38,6 +39,7 @@ class LauncherSettings(gameDir: String) {
          translateModDescriptions, modAntivirusEnabled, resolution, folder, theme, seasonalTheme,
 
         launcherMusic, menuMusicPack, playerMode, radioEnabled, ghostModeIntroSeen,
+        horizonEnabled, horizonAutoUpdate,
     )
 
     fun restore(value: LauncherPreferencesSnapshot) {
@@ -61,6 +63,8 @@ class LauncherSettings(gameDir: String) {
         launcherModeRestore(value.playerMode, value.launcherMusic, value.radioEnabled)
         radioEnabled = value.radioEnabled
         ghostModeIntroSeen = value.ghostModeIntroSeen
+        horizonEnabled = value.horizonEnabled
+        horizonAutoUpdate = value.horizonAutoUpdate
     }
 
     fun reset(gameDir: String) {
@@ -84,6 +88,8 @@ class LauncherSettings(gameDir: String) {
         playerMode = "external"
         radioEnabled = false
         ghostModeIntroSeen = false
+        horizonEnabled = false
+        horizonAutoUpdate = false
     }
 
     fun resetGhostMode() {

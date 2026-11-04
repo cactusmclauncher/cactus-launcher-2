@@ -12,11 +12,6 @@ import com.cactuslauncher.resources.inter_regular
 import com.cactuslauncher.resources.inter_semibold
 import org.jetbrains.compose.resources.Font
 
-/**
- * Inter (a free SF-alike) bundled with the app so text renders identically on
- * macOS / Windows / Linux. Font resources load asynchronously, so the family is
- * built in a composable and published through a CompositionLocal.
- */
 val LocalAppFont = staticCompositionLocalOf<FontFamily> { FontFamily.SansSerif }
 
 @Composable

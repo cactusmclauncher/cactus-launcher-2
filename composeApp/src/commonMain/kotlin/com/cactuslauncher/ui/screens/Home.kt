@@ -43,7 +43,6 @@ fun HomeScreen(
 ) {
     var query by remember { mutableStateOf("") }
     val visible = builds.filter { it.name.contains(query.trim(), true) }
-    // The stored list has no recency ordering. Do not pretend its first item is the last played.
     val featured = builds.firstOrNull()
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(40.dp),

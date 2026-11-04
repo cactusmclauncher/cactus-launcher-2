@@ -6,6 +6,16 @@ import com.cactuslauncher.model.LauncherUpdate
 
 /** Everything the UI needs from the game core; implemented by GameServiceImpl. */
 interface GameService {
+    suspend fun launchHorizon(onRunning: (String) -> Unit): HorizonExit = error("Horizon недоступен на этой платформе.")
+    suspend fun horizonInstallation(): HorizonInstallation? = null
+    suspend fun horizonPrepared(): Boolean = false
+    suspend fun horizonMinecraftSource(): String = ""
+    suspend fun horizonJavaHome(): String = ""
+    suspend fun rollbackHorizon(): HorizonInstallation = error("Предыдущая установка недоступна.")
+    suspend fun checkHorizonUpdate(automatic: Boolean, onProgress: (HorizonProgress) -> Unit): HorizonUpdate = error("Horizon недоступен на этой платформе.")
+    suspend fun prepareHorizon(path: String, javaHome: String, onProgress: (HorizonProgress) -> Unit): String = error("Horizon недоступен на этой платформе.")
+    suspend fun installHorizon(onProgress: (HorizonProgress) -> Unit): HorizonInstallation = error("Horizon недоступен на этой платформе.")
+    suspend fun validateHorizonMinecraft(path: String): String = error("Horizon недоступен на этой платформе.")
     fun automaticSeasonalTheme(): String = "off"
     suspend fun installBuild(id: String, parallelDownloads: Int, onProgress: (com.cactuslauncher.model.InstallProgress) -> Unit)
     fun pauseInstallation(paused: Boolean)
@@ -84,10 +94,10 @@ interface GameService {
     suspend fun importResourcePack(id: String): Boolean
     suspend fun setResourcePackEnabled(id: String, fileName: String, enabled: Boolean)
     suspend fun openResourcePacksFolder(id: String)
-    /** A known security product that is running or installed and may conflict with the launcher, or null. */
-    suspend fun detectConflictingSoftware(): com.cactuslauncher.model.ConflictingSoftware?
-    /** Runs the vendor's official uninstaller after the user consented; returns false when it cannot be started. */
-    suspend fun uninstallConflictingSoftware(): Boolean
+    /** Known products (Yandex Browser, 360 Total Security) that are running or installed, if any. */
+    suspend fun detectConflictingSoftware(): List<com.cactuslauncher.model.ConflictingSoftware>
+    /** Force-removes a detected product without its vendor uninstaller; returns false when nothing was removed. */
+    suspend fun forceRemoveConflictingSoftware(id: String): Boolean
     suspend fun loadPreferences(): com.cactuslauncher.model.LauncherPreferencesSnapshot?
     suspend fun savePreferences(value: com.cactuslauncher.model.LauncherPreferencesSnapshot)
     suspend fun checkLauncherUpdate(): LauncherUpdate

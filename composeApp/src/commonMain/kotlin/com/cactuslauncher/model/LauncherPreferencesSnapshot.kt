@@ -25,4 +25,6 @@ data class LauncherPreferencesSnapshot(
     val playerMode: String = "external",
     val radioEnabled: Boolean = false,
     val ghostModeIntroSeen: Boolean = false,
+    val horizonEnabled: Boolean = false,
+    val horizonAutoUpdate: Boolean = false,
 )
