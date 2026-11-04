@@ -1,5 +1,7 @@
 # Cactus Launcher 2.0
 
+Cactus LAUNCHER
+
 Лаунчер Minecraft для Windows, Linux и macOS на Kotlin Compose Desktop и Java.
 
 Главная идея 2.0 — сборки. У каждой своя версия Minecraft, загрузчик, моды, настройки и папка с игрой, так что наборы модов друг другу не мешают.
